@@ -1,0 +1,33 @@
+# ==========================================
+# Docker Compose Override Example
+# ==========================================
+#
+# Этот файл показывает как переопределить настройки для локальной разработки
+# Скопируйте в docker-compose.override.yml и настройте под себя
+#
+# docker-compose автоматически применит этот файл если он называется
+# docker-compose.override.yml
+
+version: '3.8'
+
+services:
+  # Пример: Изменить порт PostgreSQL
+  postgres:
+    ports:
+      - '5433:5432'  # Вместо 5432
+    environment:
+      POSTGRES_PASSWORD: my-custom-password
+
+  # Пример: Добавить volume для backend hot reload
+  backend:
+    volumes:
+      - ../../backend/src:/app/src
+    environment:
+      LOG_LEVEL: debug
+
+  # Пример: Включить debug режим для frontend
+  frontend:
+    environment:
+      NEXT_PUBLIC_DEBUG: 'true'
+    volumes:
+      - ../../frontend/src:/app/src

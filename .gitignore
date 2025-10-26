@@ -1,0 +1,291 @@
+# ==========================================
+# Dependencies
+# ==========================================
+node_modules/
+.pnp
+.pnp.js
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ==========================================
+# Build & Distribution
+# ==========================================
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Production
+/build
+
+# ==========================================
+# Environment Variables
+# ==========================================
+.env
+.env.local
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+
+# ==========================================
+# Testing
+# ==========================================
+coverage/
+.nyc_output
+playwright-report/
+test-results/
+
+# ==========================================
+# Logs
+# ==========================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+# ==========================================
+# TypeScript
+# ==========================================
+*.tsbuildinfo
+next-env.d.ts
+*.d.ts.map
+
+# ==========================================
+# IDE & Editors
+# ==========================================
+# VSCode
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Vim
+*.swp
+*.swo
+*~
+.vimrc.local
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ==========================================
+# OS Files
+# ==========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# ==========================================
+# Docker
+# ==========================================
+docker-compose.override.yml
+*.dockerignore.bak
+
+# ==========================================
+# Databases
+# ==========================================
+# SQLite
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# PostgreSQL
+*.pgsql
+postgres-data/
+
+# Redis
+dump.rdb
+appendonly.aof
+
+# Prisma
+prisma/migrations/**/migration.sql.tmp
+
+# ==========================================
+# Application Data
+# ==========================================
+# Uploads & Temp
+uploads/
+temp/
+tmp/
+
+# PDFs
+*.pdf
+
+# User data
+user-data/
+
+# ==========================================
+# Backups
+# ==========================================
+backups/
+*.bak
+*.backup
+*.sql
+*.sql.gz
+*.tar.gz
+*-backup-*
+
+# ==========================================
+# Claude AI
+# ==========================================
+.claude/
+
+# ==========================================
+# DevOps & Infrastructure
+# ==========================================
+# Terraform
+devops/terraform/.terraform/
+devops/terraform/*.tfstate
+devops/terraform/*.tfstate.*
+devops/terraform/*.tfvars
+devops/terraform/.terraform.lock.hcl
+devops/terraform/terraform.rc
+devops/terraform/crash.log
+devops/terraform/crash.*.log
+devops/terraform/override.tf
+devops/terraform/override.tf.json
+devops/terraform/*_override.tf
+devops/terraform/*_override.tf.json
+
+# Kubernetes
+devops/k8s/*-secret.yml
+devops/k8s/secrets/
+devops/k8s/*.sealed.yaml
+devops/k8s/kustomization.yaml
+
+# Helm
+devops/helm/**/charts/
+devops/helm/**/Chart.lock
+
+# SSL/TLS Certificates
+devops/docker/nginx/ssl/
+ssl/
+certs/
+*.crt
+*.key
+*.pem
+*.p12
+*.pfx
+*.cer
+*.csr
+
+# ==========================================
+# Monitoring & Observability
+# ==========================================
+# Sentry
+.sentryclirc
+
+# Grafana
+devops/monitoring/grafana/data/
+
+# Prometheus
+devops/monitoring/prometheus/data/
+
+# ==========================================
+# CI/CD
+# ==========================================
+.github/workflows/*.secrets
+
+# ==========================================
+# Cloud Provider Credentials
+# ==========================================
+# AWS
+.aws/
+aws-credentials.json
+
+# GCP
+gcp-credentials.json
+*-service-account-key.json
+
+# Azure
+.azure/
+
+# ==========================================
+# API Keys & Secrets
+# ==========================================
+secrets.json
+credentials.json
+auth.json
+*.secrets
+*.credentials
+
+# ==========================================
+# Python (if used)
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ==========================================
+# Misc
+# ==========================================
+# Documentation temp files
+~$*.docx
+~$*.xlsx
+~$*.pptx
+
+# Vercel
+.vercel
+
+# Turborepo
+.turbo
+
+# Miscellaneous
+*.orig
+.cache/
+.eslintcache
+.stylelintcache
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# ==========================================
+# Keep these files (exceptions)
+# ==========================================
+# Allow specific config files
+!.vscode/extensions.json
+!.vscode/settings.json
+!devops/k8s/README.md
+!devops/terraform/README.md

@@ -1,0 +1,51 @@
+{
+  "name": "careermate-monorepo",
+  "version": "1.0.0",
+  "description": "AI-powered job search automation platform",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "setup": "node scripts/setup.js",
+    "install:all": "npm install && npm install --workspace=frontend && npm install --workspace=backend",
+    "dev": "concurrently \"npm run dev --workspace=frontend\" \"npm run dev --workspace=backend\"",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "build": "npm run build --workspace=frontend && npm run build --workspace=backend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "build:backend": "npm run build --workspace=backend",
+    "test": "npm run test --workspaces",
+    "test:frontend": "npm run test --workspace=frontend",
+    "test:backend": "npm run test --workspace=backend",
+    "lint": "npm run lint --workspaces",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "docker:dev": "docker-compose -f devops/docker/docker-compose.dev.yml up -d",
+    "docker:dev:down": "docker-compose -f devops/docker/docker-compose.dev.yml down",
+    "docker:dev:logs": "docker-compose -f devops/docker/docker-compose.dev.yml logs -f",
+    "docker:prod": "docker-compose -f devops/docker/docker-compose.prod.yml up -d",
+    "docker:prod:down": "docker-compose -f devops/docker/docker-compose.prod.yml down",
+    "docker:prod:build": "docker-compose -f devops/docker/docker-compose.prod.yml build",
+    "docker:up": "npm run docker:dev",
+    "docker:down": "npm run docker:dev:down",
+    "docker:logs": "npm run docker:dev:logs",
+    "db:migrate": "npm run migrate --workspace=backend",
+    "db:seed": "npm run seed --workspace=backend",
+    "db:studio": "npm run studio --workspace=backend",
+    "deploy:staging": "bash devops/scripts/deploy.sh staging",
+    "deploy:production": "bash devops/scripts/deploy.sh production",
+    "backup:db": "bash devops/scripts/backup.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "prettier": "^3.1.0",
+    "turbo": "^1.11.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "author": "CareerMate Team",
+  "license": "MIT"
+}

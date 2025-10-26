@@ -1,0 +1,21 @@
+# ==========================================
+# Docker Compose Symlink for Development
+# ==========================================
+#
+# Этот файл - symlink на devops/docker/docker-compose.dev.yml
+# для удобства запуска из корня проекта
+#
+# Используйте: docker-compose up -d
+# Или:         docker-compose -f devops/docker/docker-compose.dev.yml up -d
+#
+# Для production используйте: devops/docker/docker-compose.prod.yml
+# ==========================================
+
+# ВАЖНО: Используйте напрямую:
+# docker-compose -f devops/docker/docker-compose.dev.yml up -d
+
+version: '3.8'
+
+# Этот файл оставлен для обратной совместимости
+# Весь DevOps код перенесен в devops/
+# См. devops/README.md для подробностей

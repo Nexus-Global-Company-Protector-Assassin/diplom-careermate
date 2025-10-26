@@ -1,0 +1,70 @@
+# =========================================
+# Backend Dockerfile (NestJS Production)
+# =========================================
+
+# Stage 1: Dependencies
+FROM node:18-alpine AS deps
+RUN apk add --no-cache libc6-compat python3 make g++
+WORKDIR /app
+
+# Copy package files
+COPY backend/package*.json ./
+COPY backend/prisma ./prisma/
+
+RUN npm ci --only=production
+RUN npx prisma generate
+
+# Stage 2: Builder
+FROM node:18-alpine AS builder
+RUN apk add --no-cache python3 make g++
+WORKDIR /app
+
+# Copy dependencies
+COPY --from=deps /app/node_modules ./node_modules
+COPY backend/ ./
+
+# Build NestJS app
+RUN npm run build
+
+# Stage 3: Runner
+FROM node:18-alpine AS runner
+WORKDIR /app
+
+# Install Chromium for Puppeteer (PDF generation)
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+# Tell Puppeteer to use installed Chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+ENV NODE_ENV=production
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nestjs
+RUN adduser --system --uid 1001 nestjs
+
+# Copy built application
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/prisma ./prisma
+COPY backend/package*.json ./
+
+# Set correct permissions
+RUN chown -R nestjs:nestjs /app
+
+USER nestjs
+
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3001/api/v1/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
