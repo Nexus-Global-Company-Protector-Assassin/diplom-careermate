@@ -61,72 +61,71 @@ log_success "Node.js $NODE_VERSION detected"
 log_header "📁 Creating Directory Structure"
 
 directories=(
-    # Frontend
-    "frontend/src"
-    "frontend/src/app"
-    "frontend/src/app/(auth)/login"
-    "frontend/src/app/(auth)/register"
-    "frontend/src/app/(dashboard)/dashboard"
-    "frontend/src/app/(dashboard)/profile"
-    "frontend/src/app/(dashboard)/resumes"
-    "frontend/src/app/(dashboard)/jobs"
-    "frontend/src/app/(dashboard)/applications"
-    "frontend/src/app/(dashboard)/interview-prep"
-    "frontend/src/components/ui"
-    "frontend/src/components/layout"
-    "frontend/src/components/forms"
-    "frontend/src/lib"
-    "frontend/src/hooks"
-    "frontend/src/services"
-    "frontend/src/types"
-    "frontend/src/utils"
-    "frontend/src/styles"
-    "frontend/public/images"
-    "frontend/public/fonts"
+    # Apps - Monorepo applications
+    "apps"
+    "apps/frontend"
+    "apps/frontend/app"
+    "apps/frontend/app/(auth)/login"
+    "apps/frontend/app/(auth)/register"
+    "apps/frontend/app/(dashboard)/dashboard"
+    "apps/frontend/app/(dashboard)/profile"
+    "apps/frontend/app/(dashboard)/resumes"
+    "apps/frontend/app/(dashboard)/jobs"
+    "apps/frontend/app/(dashboard)/applications"
+    "apps/frontend/app/(dashboard)/interview-prep"
+    "apps/frontend/app/api"
+    "apps/frontend/components/features"
+    "apps/frontend/components/layout"
+    "apps/frontend/components/shared"
+    "apps/frontend/components/ui"
+    "apps/frontend/lib"
+    "apps/frontend/hooks"
+    "apps/frontend/services"
+    "apps/frontend/styles"
+    "apps/frontend/public/images"
+    "apps/frontend/public/fonts"
 
-    # Backend
-    "backend/src/auth/strategies"
-    "backend/src/auth/guards"
-    "backend/src/auth/decorators"
-    "backend/src/users/entities"
-    "backend/src/users/dto"
-    "backend/src/profiles/entities"
-    "backend/src/profiles/dto"
-    "backend/src/profiles/career-paths"
-    "backend/src/profiles/skills-analysis"
-    "backend/src/resumes/entities"
-    "backend/src/resumes/dto"
-    "backend/src/resumes/templates"
-    "backend/src/resumes/generators"
-    "backend/src/jobs/entities"
-    "backend/src/jobs/dto"
-    "backend/src/jobs/scrapers"
-    "backend/src/jobs/matching"
-    "backend/src/applications/entities"
-    "backend/src/applications/dto"
-    "backend/src/applications/auto-apply"
-    "backend/src/applications/tracking"
-    "backend/src/interviews/entities"
-    "backend/src/interviews/dto"
-    "backend/src/interviews/company-research"
-    "backend/src/interviews/question-gen"
-    "backend/src/ai/langchain"
-    "backend/src/ai/embeddings"
-    "backend/src/ai/providers"
-    "backend/src/notifications/email"
-    "backend/src/notifications/push"
-    "backend/src/analytics/reports"
-    "backend/src/common/decorators"
-    "backend/src/common/filters"
-    "backend/src/common/guards"
-    "backend/src/common/interceptors"
-    "backend/src/common/pipes"
-    "backend/src/config"
-    "backend/src/database"
-    "backend/src/queues"
-    "backend/src/workers"
-    "backend/prisma/migrations"
-    "backend/test"
+    "apps/backend"
+    "apps/backend/src"
+    "apps/backend/src/modules"
+    "apps/backend/src/modules/auth"
+    "apps/backend/src/modules/users"
+    "apps/backend/src/modules/profiles"
+    "apps/backend/src/modules/resumes"
+    "apps/backend/src/modules/jobs"
+    "apps/backend/src/modules/applications"
+    "apps/backend/src/modules/interviews"
+    "apps/backend/src/modules/ai"
+    "apps/backend/src/modules/notifications"
+    "apps/backend/src/modules/analytics"
+    "apps/backend/src/common/decorators"
+    "apps/backend/src/common/filters"
+    "apps/backend/src/common/guards"
+    "apps/backend/src/common/interceptors"
+    "apps/backend/src/common/pipes"
+    "apps/backend/src/config"
+    "apps/backend/src/database"
+    "apps/backend/test/unit"
+    "apps/backend/test/integration"
+    "apps/backend/test/e2e"
+
+    # Packages - Shared libraries
+    "packages"
+    "packages/types/src"
+    "packages/ui/src"
+    "packages/utils/src"
+    "packages/config/src"
+
+    # Prisma - Database
+    "prisma"
+    "prisma/migrations"
+    "prisma/seeds"
+
+    # DevOps
+    "devops"
+    "devops/docker"
+    "devops/k8s"
+    "devops/scripts"
 
     # Docs
     "docs/api"
@@ -136,18 +135,11 @@ directories=(
 
     # Scripts
     "scripts/migrations"
+    "scripts/generators"
 
-    # Shared
-    "shared/types"
-    "shared/utils"
-
-    # Docker
-    "docker"
-
-    # Tests
-    "tests/e2e"
-    "tests/integration"
-    "tests/load"
+    # Legacy (for backward compatibility)
+    "frontend/src"
+    "backend/src"
 
     # Uploads
     "uploads/resumes"
@@ -155,7 +147,8 @@ directories=(
     "uploads/temp"
 
     # Logs
-    "logs"
+    "logs/backend"
+    "logs/frontend"
 )
 
 created_count=0
@@ -202,10 +195,10 @@ ${GREEN}Next Steps:${NC}
    ${BLUE}Edit .env file with your API keys and configuration${NC}
 
 2. Start infrastructure services:
-   ${GREEN}docker-compose up -d${NC}
+   ${GREEN}npm run docker:dev${NC}
 
 3. Install dependencies:
-   ${GREEN}npm run install:all${NC}
+   ${GREEN}npm install${NC}
 
 4. Setup database:
    ${GREEN}npm run db:migrate${NC}

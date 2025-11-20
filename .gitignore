@@ -263,6 +263,9 @@ pip-delete-this-directory.txt
 ~$*.xlsx
 ~$*.pptx
 
+# Project management
+YOUGILE_TASKS.md
+
 # Vercel
 .vercel
 
