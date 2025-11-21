@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # CareerMate Project Setup Script (Bash)
-# This script initializes the project structure for Unix/Linux/MacOS
+# Fully automated project setup for Unix/Linux/macOS
 
 set -e
 
@@ -10,208 +10,278 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
 
-log_info() {
-    echo -e "${BLUE}ℹ${NC} $1"
-}
-
-log_success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}⚠${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}✗${NC} $1"
-}
-
-log_header() {
-    echo ""
-    echo -e "${GREEN}$1${NC}"
-    echo ""
-}
+log_info() { echo -e "${BLUE}ℹ${NC} $1"; }
+log_success() { echo -e "${GREEN}✓${NC} $1"; }
+log_warning() { echo -e "${YELLOW}⚠${NC} $1"; }
+log_error() { echo -e "${RED}✗${NC} $1"; }
+log_header() { echo -e "\n${BOLD}${CYAN}$1${NC}\n"; }
+log_step() { echo -e "${BOLD}[$1]${NC} $2"; }
 
 # Project root
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
-log_header "🚀 CareerMate Project Setup"
+# Banner
+echo -e "
+${BOLD}${CYAN}
+   ____                          __  __       _
+  / ___|__ _ _ __ ___  ___ _ __|  \\/  | __ _| |_ ___
+ | |   / _\` | '__/ _ \\/ _ \\ '__| |\\/| |/ _\` | __/ _ \\
+ | |__| (_| | | |  __/  __/ |  | |  | | (_| | ||  __/
+  \\____\\__,_|_|  \\___|\\___|_|  |_|  |_|\\__,_|\\__\\___|
 
-# Check Node.js version
-log_info "Checking Node.js version..."
-if ! command -v node &> /dev/null; then
-    log_error "Node.js is not installed. Please install Node.js 18 or higher."
-    exit 1
-fi
+${NC}${DIM}  Project Setup Script v1.0${NC}
+"
 
-NODE_VERSION=$(node --version)
-MAJOR_VERSION=$(echo $NODE_VERSION | cut -d'.' -f1 | sed 's/v//')
+# ==========================================
+# Check Dependencies
+# ==========================================
+log_header "🔍 Checking Dependencies"
 
-if [ "$MAJOR_VERSION" -lt 18 ]; then
-    log_error "Node.js version $NODE_VERSION is not supported. Please use Node.js 18 or higher."
-    exit 1
-fi
+DEPS_OK=true
 
-log_success "Node.js $NODE_VERSION detected"
-
-# Create directory structure
-log_header "📁 Creating Directory Structure"
-
-directories=(
-    # Apps - Monorepo applications
-    "apps"
-    "apps/frontend"
-    "apps/frontend/app"
-    "apps/frontend/app/(auth)/login"
-    "apps/frontend/app/(auth)/register"
-    "apps/frontend/app/(dashboard)/dashboard"
-    "apps/frontend/app/(dashboard)/profile"
-    "apps/frontend/app/(dashboard)/resumes"
-    "apps/frontend/app/(dashboard)/jobs"
-    "apps/frontend/app/(dashboard)/applications"
-    "apps/frontend/app/(dashboard)/interview-prep"
-    "apps/frontend/app/api"
-    "apps/frontend/components/features"
-    "apps/frontend/components/layout"
-    "apps/frontend/components/shared"
-    "apps/frontend/components/ui"
-    "apps/frontend/lib"
-    "apps/frontend/hooks"
-    "apps/frontend/services"
-    "apps/frontend/styles"
-    "apps/frontend/public/images"
-    "apps/frontend/public/fonts"
-
-    "apps/backend"
-    "apps/backend/src"
-    "apps/backend/src/modules"
-    "apps/backend/src/modules/auth"
-    "apps/backend/src/modules/users"
-    "apps/backend/src/modules/profiles"
-    "apps/backend/src/modules/resumes"
-    "apps/backend/src/modules/jobs"
-    "apps/backend/src/modules/applications"
-    "apps/backend/src/modules/interviews"
-    "apps/backend/src/modules/ai"
-    "apps/backend/src/modules/notifications"
-    "apps/backend/src/modules/analytics"
-    "apps/backend/src/common/decorators"
-    "apps/backend/src/common/filters"
-    "apps/backend/src/common/guards"
-    "apps/backend/src/common/interceptors"
-    "apps/backend/src/common/pipes"
-    "apps/backend/src/config"
-    "apps/backend/src/database"
-    "apps/backend/test/unit"
-    "apps/backend/test/integration"
-    "apps/backend/test/e2e"
-
-    # Packages - Shared libraries
-    "packages"
-    "packages/types/src"
-    "packages/ui/src"
-    "packages/utils/src"
-    "packages/config/src"
-
-    # Prisma - Database
-    "prisma"
-    "prisma/migrations"
-    "prisma/seeds"
-
-    # DevOps
-    "devops"
-    "devops/docker"
-    "devops/k8s"
-    "devops/scripts"
-
-    # Docs
-    "docs/api"
-    "docs/architecture"
-    "docs/guides"
-    "docs/deployment"
-
-    # Scripts
-    "scripts/migrations"
-    "scripts/generators"
-
-    # Legacy (for backward compatibility)
-    "frontend/src"
-    "backend/src"
-
-    # Uploads
-    "uploads/resumes"
-    "uploads/cover-letters"
-    "uploads/temp"
-
-    # Logs
-    "logs/backend"
-    "logs/frontend"
-)
-
-created_count=0
-
-for dir in "${directories[@]}"; do
-    full_path="$ROOT_DIR/$dir"
-    if [ ! -d "$full_path" ]; then
-        mkdir -p "$full_path"
-        touch "$full_path/.gitkeep"
-        log_success "Created: $dir"
-        ((created_count++))
+# Check Node.js
+if command -v node &> /dev/null; then
+    NODE_VERSION=$(node --version)
+    MAJOR_VERSION=$(echo "$NODE_VERSION" | cut -d'.' -f1 | sed 's/v//')
+    if [ "$MAJOR_VERSION" -ge 18 ]; then
+        log_success "Node.js $NODE_VERSION"
+    else
+        log_error "Node.js $NODE_VERSION - requires v18+"
+        DEPS_OK=false
     fi
-done
-
-if [ $created_count -gt 0 ]; then
-    log_success "Created $created_count directories"
 else
-    log_info "All directories already exist"
+    log_error "Node.js not found"
+    DEPS_OK=false
 fi
 
-# Setup environment
+# Check npm
+if command -v npm &> /dev/null; then
+    NPM_VERSION=$(npm --version)
+    log_success "npm v$NPM_VERSION"
+else
+    log_error "npm not found"
+    DEPS_OK=false
+fi
+
+# Check Docker
+if command -v docker &> /dev/null; then
+    DOCKER_VERSION=$(docker -v | head -n1)
+    log_success "$DOCKER_VERSION"
+
+    # Check Docker daemon
+    if docker info &> /dev/null; then
+        log_success "Docker daemon is running"
+    else
+        log_warning "Docker daemon is not running - please start Docker Desktop"
+    fi
+else
+    log_error "Docker not found - please install Docker Desktop"
+    DEPS_OK=false
+fi
+
+# Check docker-compose
+if command -v docker-compose &> /dev/null || docker compose version &> /dev/null; then
+    log_success "Docker Compose available"
+else
+    log_warning "Docker Compose not found"
+fi
+
+if [ "$DEPS_OK" = false ]; then
+    log_error "Please install missing dependencies and try again"
+    exit 1
+fi
+
+# ==========================================
+# Setup Environment
+# ==========================================
 log_header "⚙️  Setting Up Environment"
 
+# Root .env
 if [ ! -f "$ROOT_DIR/.env" ]; then
-    cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
-    log_success "Created .env file from .env.example"
-    log_warning "Please update .env with your configuration"
+    if [ -f "$ROOT_DIR/.env.example" ]; then
+        cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
+        log_success "Created .env from .env.example"
+    fi
 else
-    log_info ".env file already exists"
+    log_info ".env already exists"
 fi
 
-# Make scripts executable
-chmod +x "$SCRIPT_DIR/setup.sh" 2>/dev/null || true
-chmod +x "$ROOT_DIR/node_modules/.bin/"* 2>/dev/null || true
+# Frontend .env.local
+if [ ! -f "$ROOT_DIR/frontend/.env.local" ]; then
+    if [ -f "$ROOT_DIR/frontend/.env.example" ]; then
+        cp "$ROOT_DIR/frontend/.env.example" "$ROOT_DIR/frontend/.env.local"
+        log_success "Created frontend/.env.local"
+    fi
+else
+    log_info "frontend/.env.local already exists"
+fi
 
-# Success message
+# Backend .env
+if [ ! -f "$ROOT_DIR/backend/.env" ]; then
+    if [ -f "$ROOT_DIR/backend/.env.example" ]; then
+        cp "$ROOT_DIR/backend/.env.example" "$ROOT_DIR/backend/.env"
+        log_success "Created backend/.env"
+    fi
+else
+    log_info "backend/.env already exists"
+fi
+
+# ==========================================
+# Install Dependencies
+# ==========================================
+log_header "📦 Installing Dependencies"
+
+# Root dependencies
+if [ -f "$ROOT_DIR/package.json" ]; then
+    log_step 1 "Installing root dependencies..."
+    cd "$ROOT_DIR" && npm install
+    log_success "Root dependencies installed"
+fi
+
+# Frontend dependencies
+if [ -f "$ROOT_DIR/frontend/package.json" ]; then
+    log_step 2 "Installing frontend dependencies..."
+    cd "$ROOT_DIR/frontend" && npm install
+    log_success "Frontend dependencies installed"
+fi
+
+# Backend dependencies
+if [ -f "$ROOT_DIR/backend/package.json" ]; then
+    log_step 3 "Installing backend dependencies..."
+    cd "$ROOT_DIR/backend" && npm install
+    log_success "Backend dependencies installed"
+fi
+
+cd "$ROOT_DIR"
+
+# ==========================================
+# Start Docker Services
+# ==========================================
+log_header "🐳 Starting Docker Services"
+
+DOCKER_STARTED=false
+
+if [ -f "$ROOT_DIR/docker-compose.yml" ]; then
+    if docker info &> /dev/null; then
+        log_info "Starting containers (this may take a few minutes on first run)..."
+
+        # Try docker compose v2 first
+        if docker compose version &> /dev/null; then
+            docker compose up -d
+        else
+            docker-compose up -d
+        fi
+
+        log_success "Docker services started"
+
+        # Wait for services
+        log_info "Waiting for services to be healthy..."
+        ATTEMPTS=0
+        MAX_ATTEMPTS=30
+
+        while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
+            if docker compose exec -T postgres pg_isready &> /dev/null 2>&1; then
+                break
+            fi
+            ATTEMPTS=$((ATTEMPTS + 1))
+            sleep 2
+        done
+
+        if [ $ATTEMPTS -ge $MAX_ATTEMPTS ]; then
+            log_warning "Services may not be fully ready yet"
+        else
+            log_success "All services are healthy"
+        fi
+
+        DOCKER_STARTED=true
+    else
+        log_warning "Docker daemon not running - skipping container startup"
+        log_info "Start Docker Desktop and run: docker-compose up -d"
+    fi
+else
+    log_warning "docker-compose.yml not found"
+fi
+
+# ==========================================
+# Run Database Migrations
+# ==========================================
+log_header "🗄️  Setting Up Database"
+
+if [ "$DOCKER_STARTED" = true ] && [ -f "$ROOT_DIR/backend/prisma/schema.prisma" ]; then
+    log_info "Waiting for database to be ready..."
+    sleep 5
+
+    cd "$ROOT_DIR/backend"
+
+    # Generate Prisma client
+    log_info "Generating Prisma client..."
+    npx prisma generate || log_warning "Prisma generate failed"
+    log_success "Prisma client generated"
+
+    # Run migrations
+    log_info "Running database migrations..."
+    npx prisma migrate deploy || log_warning "Migration failed - run manually: cd backend && npx prisma migrate deploy"
+    log_success "Database migrations applied"
+
+    cd "$ROOT_DIR"
+else
+    log_warning "Skipping migrations (Docker not running or Prisma not found)"
+fi
+
+# ==========================================
+# Summary
+# ==========================================
 log_header "✅ Setup Complete!"
 
 cat << EOF
 
-${GREEN}Next Steps:${NC}
+${BOLD}Services are running at:${NC}
 
-1. Configure your environment:
-   ${BLUE}Edit .env file with your API keys and configuration${NC}
+${CYAN}Application:${NC}
+  Frontend:         http://localhost:3000
+  Backend API:      http://localhost:3001
+  API Docs:         http://localhost:3001/api/docs
 
-2. Start infrastructure services:
-   ${GREEN}npm run docker:dev${NC}
+${CYAN}Database & Cache:${NC}
+  PostgreSQL:       localhost:5432
+  Redis:            localhost:6379
 
-3. Install dependencies:
-   ${GREEN}npm install${NC}
+${CYAN}Admin Tools:${NC}
+  PgAdmin:          http://localhost:5050
+  Redis Commander:  http://localhost:8081
+  MinIO Console:    http://localhost:9001
+  MailHog:          http://localhost:8025
 
-4. Setup database:
-   ${GREEN}npm run db:migrate${NC}
+${BOLD}Default Credentials:${NC}
 
-5. Start development servers:
-   ${GREEN}npm run dev${NC}
+${CYAN}PostgreSQL:${NC}
+  User:     careermate
+  Password: careermate_dev_pass
+  Database: careermate_dev
 
-${YELLOW}Optional Development Tools:${NC}
-   - PgAdmin: http://localhost:5050
-   - Redis Commander: http://localhost:8081
-   - MinIO Console: http://localhost:9001
-   - MailHog: http://localhost:8025
+${CYAN}PgAdmin:${NC}
+  Email:    admin@careermate.com
+  Password: admin
 
-${GREEN}For more information, see README.md${NC}
+${CYAN}Redis:${NC}
+  Password: careermate_redis_pass
+
+${CYAN}MinIO:${NC}
+  User:     minioadmin
+  Password: minioadmin
+
+${BOLD}Quick Start:${NC}
+
+  ${GREEN}npm run dev${NC}           # Start development servers
+  ${GREEN}npm run docker:dev${NC}    # Start/restart Docker services
+  ${GREEN}npm run db:studio${NC}     # Open Prisma Studio
+
+${DIM}For more information, see README.md${NC}
 
 EOF

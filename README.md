@@ -1,8 +1,11 @@
 # 🚀 CareerMate - AI-Powered Job Search Platform
 
+[![CI](https://github.com/yourusername/careermate/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/careermate/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)](https://www.docker.com/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 > **AI-платформа для автоматизации поиска работы** с персонализированными рекомендациями, генерацией резюме и автоматическими откликами.
 
@@ -15,6 +18,7 @@
 - [Разработка](#разработка)
 - [Тестирование](#тестирование)
 - [Развертывание](#развертывание)
+- [Troubleshooting](#troubleshooting)
 - [Документация](#документация)
 - [Contributing](#contributing)
 - [Лицензия](#лицензия)
@@ -376,6 +380,128 @@ docker-compose -f docker-compose.prod.yml up -d
 - **Storage**: Cloudflare R2 / AWS S3
 
 Подробнее см. [docs/deployment/](docs/deployment/)
+
+---
+
+## 🔧 Troubleshooting
+
+### Docker не запускается
+
+**Проблема:** `docker-compose up` выдает ошибку
+
+```bash
+# Проверьте, запущен ли Docker daemon
+docker info
+
+# Если Docker Desktop не запущен - запустите его
+# Затем попробуйте снова
+docker-compose up -d
+```
+
+### Порт уже занят
+
+**Проблема:** `Error: listen EADDRINUSE: address already in use :::3000`
+
+```bash
+# Найти процесс на порту (Windows)
+netstat -ano | findstr :3000
+
+# Найти процесс на порту (macOS/Linux)
+lsof -i :3000
+
+# Или измените порт в .env
+API_PORT=3002
+```
+
+### База данных не подключается
+
+**Проблема:** `Error: P1001: Can't reach database server`
+
+```bash
+# Проверьте статус контейнера PostgreSQL
+docker-compose ps postgres
+
+# Проверьте логи
+docker-compose logs postgres
+
+# Перезапустите контейнер
+docker-compose restart postgres
+
+# Подождите 10-15 секунд и попробуйте снова
+```
+
+### Prisma ошибки
+
+**Проблема:** `PrismaClientInitializationError`
+
+```bash
+cd backend
+
+# Пересоздайте Prisma Client
+npx prisma generate
+
+# Если проблема в миграциях
+npx prisma migrate reset  # ВНИМАНИЕ: удалит все данные!
+npx prisma migrate dev
+```
+
+### Node modules проблемы
+
+**Проблема:** Ошибки при импорте модулей
+
+```bash
+# Удалите и переустановите зависимости
+rm -rf node_modules package-lock.json
+rm -rf frontend/node_modules frontend/package-lock.json
+rm -rf backend/node_modules backend/package-lock.json
+
+npm install
+cd frontend && npm install
+cd ../backend && npm install
+```
+
+### Redis не подключается
+
+**Проблема:** `ECONNREFUSED 127.0.0.1:6379`
+
+```bash
+# Проверьте Redis контейнер
+docker-compose logs redis
+
+# Перезапустите
+docker-compose restart redis
+```
+
+### Windows: PowerShell execution policy
+
+**Проблема:** `scripts\setup.ps1 cannot be loaded because running scripts is disabled`
+
+```powershell
+# Запустите PowerShell как администратор
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# Или используйте Node.js скрипт вместо PowerShell
+node scripts/setup.js
+```
+
+### macOS: Permission denied
+
+**Проблема:** `permission denied: ./scripts/setup.sh`
+
+```bash
+chmod +x scripts/setup.sh
+./scripts/setup.sh
+```
+
+### Медленная первая сборка Docker
+
+Первая сборка может занять 5-10 минут из-за скачивания образов и установки зависимостей. Последующие запуски будут быстрее благодаря кэшированию.
+
+### Нужна дополнительная помощь?
+
+1. Проверьте [полный гайд по troubleshooting](docs/guides/troubleshooting.md)
+2. Поищите в [Issues](https://github.com/yourusername/careermate/issues)
+3. Создайте новый Issue с описанием проблемы
 
 ---
 
