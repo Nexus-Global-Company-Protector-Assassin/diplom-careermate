@@ -81,7 +81,6 @@ const nextConfig = {
 
   // Experimental features
   experimental: {
-    serverActions: true,
     serverComponentsExternalPackages: ['@prisma/client'],
   },
 
