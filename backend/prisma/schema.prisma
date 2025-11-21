@@ -1,0 +1,223 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String    @id @default(uuid())
+  email                 String    @unique
+  passwordHash          String?
+  oauthProvider         String?
+  oauthId               String?
+  subscriptionTier      String    @default("free")
+  subscriptionExpiresAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  lastLoginAt           DateTime?
+
+  profile               Profile?
+  resumes               Resume[]
+  applications          Application[]
+  careerPaths           CareerPath[]
+  weeklyReports         WeeklyReport[]
+  activityLogs          ActivityLog[]
+}
+
+model Profile {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  fullName            String?
+  phone               String?
+  location            String?
+  desiredPosition     String?
+  desiredSalaryMin    Int?
+  desiredSalaryMax    Int?
+  experienceYears     Int?
+  education           Json?
+  workExperience      Json?
+  skills              Json?
+  languages           Json?
+  aboutMe             String?
+  careerGoals         String?
+  linkedinUrl         String?
+  githubUrl           String?
+  portfolioUrl        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CareerPath {
+  id                  String   @id @default(uuid())
+  userId              String
+  title               String
+  description         String
+  requiredSkills      Json
+  timelineMonths      Int
+  salaryRange         Json
+  marketDemandScore   Decimal  @db.Decimal(3, 2)
+  confidenceScore     Decimal  @db.Decimal(3, 2)
+  generatedAt         DateTime @default(now())
+  isSelected          Boolean  @default(false)
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Resume {
+  id              String   @id @default(uuid())
+  userId          String
+  title           String
+  content         Json     // Structured resume data
+  templateId      String?
+  pdfUrl          String?  // URL to the generated PDF
+  pdfS3Key        String?  // S3 key for the PDF
+  isDefault       Boolean  @default(false)
+  version         Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Job {
+  id                  String   @id @default(uuid())
+  externalId          String?
+  source              String   // 'hh', 'linkedin', 'indeed', 'manual'
+  url                 String?
+  title               String
+  companyName         String
+  companyId           String?
+  company             Company? @relation(fields: [companyId], references: [id])
+  location            String?
+  remoteType          String?  // 'remote', 'hybrid', 'office'
+  employmentType      String?  // 'full-time', 'part-time', 'contract'
+  salaryMin           Int?
+  salaryMax           Int?
+  currency            String?
+  description         String?
+  requirements        String?
+  responsibilities    String?
+  benefits            String?
+  skillsRequired      Json?
+  experienceYearsMin  Int?
+  experienceYearsMax  Int?
+  publishedAt         DateTime?
+  expiresAt           DateTime?
+  isActive            Boolean  @default(true)
+  viewCount           Int      @default(0)
+  applyCount          Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  applications        Application[]
+  coverLetters        CoverLetter[]
+  interviewPreps      InterviewPreparation[]
+
+  @@unique([externalId, source])
+}
+
+model Application {
+  id                     String   @id @default(uuid())
+  userId                 String
+  jobId                  String?
+  resumeId               String?
+  coverLetterId          String?
+  status                 String   @default("pending") // pending, sent, viewed, interview, rejected, accepted
+  appliedAt              DateTime @default(now())
+  responseAt             DateTime?
+  interviewScheduledAt   DateTime?
+  notes                  String?
+  isAutoApplied          Boolean  @default(false)
+  externalApplicationId  String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job           Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  resume        Resume?  @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  coverLetter   CoverLetter? @relation(fields: [coverLetterId], references: [id], onDelete: SetNull)
+}
+
+model CoverLetter {
+  id           String   @id @default(uuid())
+  userId       String
+  jobId        String?
+  content      String
+  generatedAt  DateTime @default(now())
+  isUsed       Boolean  @default(false)
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job          Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+}
+
+model Company {
+  id               String   @id @default(uuid())
+  name             String   @unique
+  website          String?
+  industry         String?
+  size             String?
+  location         String?
+  description      String?
+  cultureInfo      Json?
+  interviewStyle   Json?
+  glassdoorRating  Decimal? @db.Decimal(2, 1)
+  linkedinUrl      String?
+  logoUrl          String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  jobs             Job[]
+  interviewPreps   InterviewPreparation[]
+}
+
+model InterviewPreparation {
+  id              String   @id @default(uuid())
+  userId          String
+  companyId       String?
+  jobId           String?
+  commonQuestions Json?
+  suggestedAnswers Json?
+  companyResearch Json?
+  tips            Json?
+  generatedAt     DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  job       Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+}
+
+model WeeklyReport {
+  id                 String   @id @default(uuid())
+  userId             String
+  weekStartDate      DateTime
+  applicationsSent   Int      @default(0)
+  responsesReceived  Int      @default(0)
+  interviewsScheduled Int     @default(0)
+  jobsViewed         Int      @default(0)
+  profileViews       Int      @default(0)
+  recommendations    Json?
+  createdAt          DateTime @default(now())
+
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id          BigInt   @id @default(autoincrement()) // Using BigInt for auto-increment
+  userId      String?
+  action      String
+  resourceType String?
+  resourceId  String?
+  metadata    Json?
+  ipAddress   String? // Will store as String, can be converted to inet if needed
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}

@@ -40,6 +40,7 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "prettier": "^3.1.0",
+    "prisma": "^7.0.0",
     "turbo": "^1.11.0"
   },
   "engines": {
@@ -47,5 +48,8 @@
     "npm": ">=9.0.0"
   },
   "author": "CareerMate Team",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^7.0.0"
+  }
 }
