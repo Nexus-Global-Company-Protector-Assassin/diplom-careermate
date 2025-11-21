@@ -1,0 +1,56 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Build output
+dist
+build
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Tests
+coverage
+test
+tests
+*.spec.ts
+*.test.ts
+jest.config.js
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Documentation
+docs
+*.md
+LICENSE
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Misc
+.eslintrc*
+.prettierrc*
+.editorconfig
+tsconfig.build.json
+nest-cli.json

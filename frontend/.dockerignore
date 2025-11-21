@@ -1,0 +1,63 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Build output
+.next
+out
+build
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Tests
+coverage
+playwright-report
+test-results
+*.spec.ts
+*.spec.tsx
+*.test.ts
+*.test.tsx
+jest.config.js
+playwright.config.ts
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Documentation
+docs
+*.md
+LICENSE
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Misc
+.eslintrc*
+.prettierrc*
+.editorconfig
+tsconfig.tsbuildinfo
+
+# Storybook
+.storybook
+storybook-static
