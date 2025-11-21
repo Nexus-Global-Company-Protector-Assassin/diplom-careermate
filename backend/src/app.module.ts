@@ -39,4 +39,4 @@ import { CommonServiceModule } from './common/common-service.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

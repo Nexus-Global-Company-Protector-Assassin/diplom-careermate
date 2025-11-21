@@ -6,7 +6,6 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as helmet from 'helmet';
 import * as compression from 'compression';
 import * as cookieParser from 'cookie-parser';
-import { Logger } from 'winston';
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
 
@@ -41,6 +40,7 @@ async function bootstrap() {
 
   // Security
   app.use(helmet());
+  app.enableCors();
 
   // Compression
   app.use(compression());
