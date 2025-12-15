@@ -111,17 +111,18 @@ if (-not (Test-Path $envFile)) {
     Write-Info ".env already exists"
 }
 
-# Frontend .env.local
-$feEnvFile = Join-Path $ROOT_DIR "frontend\.env.local"
-$feEnvExample = Join-Path $ROOT_DIR "frontend\.env.example"
-if (-not (Test-Path $feEnvFile)) {
-    if (Test-Path $feEnvExample) {
-        Copy-Item $feEnvExample $feEnvFile
-        Write-Success "Created frontend\.env.local"
-    }
-} else {
-    Write-Info "frontend\.env.local already exists"
+# Install dependencies
+Write-Header "📦 Installing Dependencies"
+Write-Info "Installing dependencies... This may take a few minutes."
+try {
+    npm run install:all
+    Write-Success "Dependencies installed successfully"
+} catch {
+    Write-ErrorMsg "Failed to install dependencies. Please run 'npm run install:all' manually."
 }
+
+# Success message
+Write-Header "✅ Setup Complete!"
 
 # Backend .env
 $beEnvFile = Join-Path $ROOT_DIR "backend\.env"

@@ -1,5 +1,10 @@
-import { redirect } from "next/navigation"
+import { MainLayout } from "@/widgets/layout/main-layout"
+import { DashboardContent } from "@/widgets/dashboard/dashboard-content"
 
-export default function Home() {
-  redirect("/dashboard")
+export default function DashboardPage() {
+  return (
+    <MainLayout>
+      <DashboardContent />
+    </MainLayout>
+  )
 }

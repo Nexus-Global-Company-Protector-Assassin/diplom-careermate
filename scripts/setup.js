@@ -264,7 +264,7 @@ function startDockerServices() {
       try {
         execSync('docker compose exec -T postgres pg_isready', { stdio: 'pipe', cwd: ROOT_DIR });
         break;
-      } catch {}
+      } catch { }
     }
 
     attempts++;
@@ -388,8 +388,21 @@ ${colors.reset}${colors.dim}  Project Setup Script v1.0${colors.reset}
     // Step 2: Setup environment
     setupEnvironment();
 
-    // Step 3: Install dependencies
-    installDependencies();
+    // Install dependencies
+    log.header('📦 Installing Dependencies');
+    log.info('Installing dependencies... This may take a few minutes.');
+    try {
+      execSync('npm run install:all', { stdio: 'inherit', cwd: ROOT_DIR });
+      log.success('Dependencies installed successfully');
+    } catch (error) {
+      log.error('Failed to install dependencies. Please run "npm run install:all" manually.');
+    }
+
+    // Success message
+    log.header('✅ Setup Complete!');
+    console.log(`
+${colors.bright}Next Steps:${colors.reset}
+`);
 
     // Step 4: Start Docker services
     const dockerStarted = startDockerServices();
