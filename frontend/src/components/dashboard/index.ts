@@ -1,6 +1,0 @@
-export { WelcomeSection } from "./WelcomeSection"
-export { CareerProgress } from "./CareerProgress"
-export { QuickActions } from "./QuickActions"
-export { CareerGoal } from "./CareerGoal"
-export { WeeklyReport } from "./WeeklyReport"
-export { AIRecommendations } from "./AIRecommendations"
