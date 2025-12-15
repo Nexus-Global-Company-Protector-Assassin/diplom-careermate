@@ -215,6 +215,16 @@ async function main() {
     log.header('⚙️  Setting Up Environment');
     setupEnvironment();
 
+    // Install dependencies
+    log.header('📦 Installing Dependencies');
+    log.info('Installing dependencies... This may take a few minutes.');
+    try {
+      execSync('npm run install:all', { stdio: 'inherit', cwd: ROOT_DIR });
+      log.success('Dependencies installed successfully');
+    } catch (error) {
+      log.error('Failed to install dependencies. Please run "npm run install:all" manually.');
+    }
+
     // Success message
     log.header('✅ Setup Complete!');
     console.log(`
