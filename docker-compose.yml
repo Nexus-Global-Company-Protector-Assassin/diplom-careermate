@@ -104,6 +104,20 @@ services:
     networks:
       - careermate-network
 
+  # Agent Service (MCP/LLM)
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    container_name: careermate-agent
+    restart: always
+    ports:
+      - "${AGENT_PORT:-3002}:3002"
+    environment:
+      PORT: 3002
+    networks:
+      - careermate-network
+
 volumes:
   postgres_data:
   redis_data:

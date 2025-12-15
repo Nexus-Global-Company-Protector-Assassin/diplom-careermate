@@ -5,7 +5,8 @@
   "private": true,
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "agent"
   ],
   "scripts": {
     "setup": "node scripts/setup.js",
