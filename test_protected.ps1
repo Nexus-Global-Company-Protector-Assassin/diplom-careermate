@@ -1,0 +1,3 @@
+
+$token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJzdWIiOiJiZGY1NTMyYy1kYTFiLTRmYzUtODRhNy0yZWRmMzE0YmIxMzEiLCJpYXQiOjE3NjU4ODIzMzksImV4cCI6MTc2NTg4NTkzOX0.0JjCnP4cXQlsP6TWAfO0YFManIbtPczWcERKuHXR7CY"
+curl.exe -s http://localhost:3001/api/v1/users/me -H "Authorization: Bearer $token"

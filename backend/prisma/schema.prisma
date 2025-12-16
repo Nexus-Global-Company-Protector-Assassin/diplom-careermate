@@ -11,10 +11,61 @@ datasource db {
 }
 
 model User {
+  id                    String    @id @default(uuid())
+  email                 String    @unique
+  passwordHash          String?
+  oauthProvider         String?
+  oauthId               String?
+  subscriptionTier      String    @default("free")
+  subscriptionExpiresAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  lastLoginAt           DateTime?
+  hashedRefreshToken    String?
+
+  profile               Profile?
+}
+
+model Profile {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName            String?
+  phone               String?
+  location            String?
+  desiredPosition     String?
+  desiredSalaryMin    Int?
+  desiredSalaryMax    Int?
+  experienceYears     Int?
+  education           Json?
+  workExperience      Json?
+  skills              Json?
+  languages           Json?
+  aboutMe             String?
+  careerGoals         String?
+  linkedinUrl         String?
+  githubUrl           String?
+  portfolioUrl        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  analysisResults     AnalysisResult[]
+  resumes             Resume[]
+}
+
+model AnalysisResult {
   id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  fullName  String?
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id])
+  content   Json     // Full analysis result from Agent
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+}
+
+model Resume {
+  id        String   @id @default(uuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id])
+  content   String   // Markdown or HTML content
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
 }
