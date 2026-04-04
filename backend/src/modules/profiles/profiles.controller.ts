@@ -1,38 +1,60 @@
-import { Controller, Post, Body, Get, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, Post, Body, Get, Put, Delete, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { ProfilesService } from './profiles.service';
 import { CreateProfileDto } from './dto/create-profile.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
 
 @ApiTags('Profiles')
 @Controller('profiles')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class ProfilesController {
     constructor(private readonly profilesService: ProfilesService) { }
 
-    @Post()
-    @ApiOperation({ summary: 'Create or update user profile' })
+    @Post('me')
+    @ApiOperation({ summary: 'Create or upsert profile for current user' })
+    @ApiBody({ type: CreateProfileDto })
     @ApiResponse({ status: 201, description: 'Profile created/updated successfully' })
-    create(@Body() createProfileDto: CreateProfileDto) {
-        // TODO: Get userId from JWT/Auth guard. For PoC, we might need to pass it or mock it.
-        // For now, let's assume a hardcoded userId or pass it in body/headers if needed.
-        // But wait, schema says userId is unique.
-        // Let's assume for PoC we pass userId in headers or body for simplicity if Auth is not fully ready.
-        // OR generate a temporary user if not exists.
-
-        // TEMPORARY: For PoC simplicity without full Auth flow, let's create a dummy user if needed
-        // or expect userId in a header 'x-user-id'.
-        // Actually, let's just use a hardcoded demo user ID for the PoC flow if not provided.
-        const userId = 'demo-user-id';
-
-        // Wait, we need a real user in DB because of foreign key.
-        // We'll handle this in the service or assume the user exists.
-        // Let's pass a dummy userId for now, but we need to ensure it exists.
-
-        return this.profilesService.create(userId, createProfileDto);
+    @ApiResponse({ status: 401, description: 'Unauthorized' })
+    async createProfile(
+        @CurrentUser() user: any,
+        @Body() createProfileDto: CreateProfileDto,
+    ) {
+        return this.profilesService.createProfile(user.userId, createProfileDto);
     }
 
-    @Get(':userId')
-    @ApiOperation({ summary: 'Get user profile' })
-    findOne(@Param('userId') userId: string) {
-        return this.profilesService.findOne(userId);
+    @Get('me')
+    @ApiOperation({ summary: 'Get profile for current user' })
+    @ApiResponse({ status: 200, description: 'Returns the user profile' })
+    @ApiResponse({ status: 401, description: 'Unauthorized' })
+    @ApiResponse({ status: 404, description: 'Profile not found' })
+    async getProfile(@CurrentUser() user: any) {
+        return this.profilesService.getProfile(user.userId);
+    }
+
+    @Put('me')
+    @ApiOperation({ summary: 'Update profile for current user' })
+    @ApiBody({ type: UpdateProfileDto })
+    @ApiResponse({ status: 200, description: 'Profile updated successfully' })
+    @ApiResponse({ status: 401, description: 'Unauthorized' })
+    @ApiResponse({ status: 404, description: 'Profile not found' })
+    async updateProfile(
+        @CurrentUser() user: any,
+        @Body() updateProfileDto: UpdateProfileDto,
+    ) {
+        return this.profilesService.updateProfile(user.userId, updateProfileDto);
+    }
+
+    @Delete('me')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Delete profile for current user' })
+    @ApiResponse({ status: 200, description: 'Profile deleted successfully' })
+    @ApiResponse({ status: 401, description: 'Unauthorized' })
+    @ApiResponse({ status: 404, description: 'Profile not found' })
+    async deleteProfile(@CurrentUser() user: any) {
+        return this.profilesService.deleteProfile(user.userId);
     }
 }
+

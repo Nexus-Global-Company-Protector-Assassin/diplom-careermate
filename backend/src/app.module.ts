@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { ProfilesModule } from './modules/profiles/profiles.module';
 import { PocModule } from './modules/poc/poc.module';
 import { HealthController } from './health.controller';
@@ -15,6 +16,13 @@ import { RedisModule } from './modules/redis/redis.module';
             isGlobal: true,
             envFilePath: ['.env'],
         }),
+        // Rate limiting: 100 req/min globally
+        ThrottlerModule.forRoot([
+            {
+                ttl: 60000, // 1 minute in ms
+                limit: 100,
+            },
+        ]),
         DatabaseModule,
         AuthModule,
         UsersModule,
@@ -26,3 +34,4 @@ import { RedisModule } from './modules/redis/redis.module';
     providers: [],
 })
 export class AppModule { }
+
