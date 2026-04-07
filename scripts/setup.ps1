@@ -4,11 +4,11 @@
 $ErrorActionPreference = "Stop"
 
 # Colors
-function Write-Info($message) { Write-Host "i " -ForegroundColor Blue -NoNewline; Write-Host $message }
-function Write-Success($message) { Write-Host "√ " -ForegroundColor Green -NoNewline; Write-Host $message }
-function Write-Warn($message) { Write-Host "! " -ForegroundColor Yellow -NoNewline; Write-Host $message }
-function Write-Err($message) { Write-Host "X " -ForegroundColor Red -NoNewline; Write-Host $message }
-function Write-Header($message) { Write-Host "`n$message`n" -ForegroundColor Cyan }
+function Write-Info($message)    { Write-Host "i " -ForegroundColor Blue   -NoNewline; Write-Host $message }
+function Write-Success($message) { Write-Host "v " -ForegroundColor Green  -NoNewline; Write-Host $message }
+function Write-Warn($message)    { Write-Host "! " -ForegroundColor Yellow -NoNewline; Write-Host $message }
+function Write-Err($message)     { Write-Host "X " -ForegroundColor Red    -NoNewline; Write-Host $message }
+function Write-Header($message)  { Write-Host "`n$message`n" -ForegroundColor Cyan }
 function Write-Step($num, $message) { Write-Host "[$num] " -ForegroundColor White -NoNewline; Write-Host $message }
 
 # Project root
@@ -21,7 +21,7 @@ Write-Host @"
   / ___|__ _ _ __ ___  ___ _ __|  \/  | __ _| |_ ___
  | |   / _`` | '__/ _ \/ _ \ '__| |\/| |/ _`` | __/ _ \
  | |__| (_| | | |  __/  __/ |  | |  | | (_| | ||  __/
-  \____\__,_|_|  \___|\___|_|  |_|  |_|\__,_|\__\___|
+  \____\__,_|_|  \___|\____|_|  |_|  |_|\__,_|\__\___|
 
   Project Setup Script v1.0
 
@@ -100,7 +100,7 @@ if (-not $depsOk) {
 Write-Header "Setting Up Environment"
 
 # Root .env
-$envFile = Join-Path $ROOT_DIR ".env"
+$envFile    = Join-Path $ROOT_DIR ".env"
 $envExample = Join-Path $ROOT_DIR ".env.example"
 if (-not (Test-Path $envFile)) {
     if (Test-Path $envExample) {
@@ -111,21 +111,8 @@ if (-not (Test-Path $envFile)) {
     Write-Info ".env already exists"
 }
 
-# Install dependencies
-Write-Header "📦 Installing Dependencies"
-Write-Info "Installing dependencies... This may take a few minutes."
-try {
-    npm run install:all
-    Write-Success "Dependencies installed successfully"
-} catch {
-    Write-ErrorMsg "Failed to install dependencies. Please run 'npm run install:all' manually."
-}
-
-# Success message
-Write-Header "✅ Setup Complete!"
-
 # Backend .env
-$beEnvFile = Join-Path $ROOT_DIR "backend\.env"
+$beEnvFile    = Join-Path $ROOT_DIR "backend\.env"
 $beEnvExample = Join-Path $ROOT_DIR "backend\.env.example"
 if (-not (Test-Path $beEnvFile)) {
     if (Test-Path $beEnvExample) {
@@ -177,7 +164,7 @@ if (Test-Path $bePackage) {
 Write-Header "Starting Docker Services"
 
 $dockerStarted = $false
-$composeFile = Join-Path $ROOT_DIR "docker-compose.yml"
+$composeFile   = Join-Path $ROOT_DIR "docker-compose.yml"
 
 if (Test-Path $composeFile) {
     $null = docker info 2>$null
@@ -196,7 +183,7 @@ if (Test-Path $composeFile) {
 
         # Wait for services
         Write-Info "Waiting for services to be healthy..."
-        $attempts = 0
+        $attempts    = 0
         $maxAttempts = 30
 
         while ($attempts -lt $maxAttempts) {
@@ -217,7 +204,7 @@ if (Test-Path $composeFile) {
         $dockerStarted = $true
     } else {
         Write-Warn "Docker daemon not running - skipping container startup"
-        Write-Info "Start Docker Desktop and run: docker-compose up -d"
+        Write-Info "Start Docker Desktop and run: docker compose up -d"
     }
 } else {
     Write-Warn "docker-compose.yml not found"
@@ -308,9 +295,9 @@ MinIO:
 
 Write-Host "Quick Start:" -ForegroundColor White
 Write-Host ""
-Write-Host "  npm run dev" -ForegroundColor Green -NoNewline; Write-Host "           # Start development servers"
-Write-Host "  npm run docker:dev" -ForegroundColor Green -NoNewline; Write-Host "    # Start/restart Docker services"
-Write-Host "  npm run db:studio" -ForegroundColor Green -NoNewline; Write-Host "     # Open Prisma Studio"
+Write-Host "  npm run dev"          -ForegroundColor Green -NoNewline; Write-Host "           # Start development servers"
+Write-Host "  npm run docker:dev"   -ForegroundColor Green -NoNewline; Write-Host "    # Start/restart Docker services"
+Write-Host "  npm run db:studio"    -ForegroundColor Green -NoNewline; Write-Host "     # Open Prisma Studio"
 Write-Host ""
 Write-Host "For more information, see README.md" -ForegroundColor DarkGray
 Write-Host ""
