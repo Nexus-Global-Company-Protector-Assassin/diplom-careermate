@@ -1,0 +1,38 @@
+[
+  {
+    "profile": "Junior React Dev",
+    "success": true,
+    "latencyMs": 11876,
+    "metrics": {
+      "level": "Junior",
+      "score": 58
+    }
+  },
+  {
+    "profile": "Middle Node.js Engineer",
+    "success": true,
+    "latencyMs": 12110,
+    "metrics": {
+      "level": "Middle",
+      "score": 72
+    }
+  },
+  {
+    "profile": "Senior Fullstack (React/Go)",
+    "success": true,
+    "latencyMs": 29148,
+    "metrics": {
+      "level": "Senior",
+      "score": 82
+    }
+  },
+  {
+    "profile": "Switcher QA -> Data Analyst",
+    "success": true,
+    "latencyMs": 12589,
+    "metrics": {
+      "level": "Middle",
+      "score": 62
+    }
+  }
+]
