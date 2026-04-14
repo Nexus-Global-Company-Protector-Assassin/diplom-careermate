@@ -1,12 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
 import { Label } from "@/shared/ui/label"
 import { User, Briefcase, GraduationCap, Wrench, X, Plus, Trash2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
+import { useRouter } from "next/navigation"
+import { useRunPoc } from "@/features/poc/api/use-run-poc"
+import { ProfileDto } from "@/shared/api"
+import { toast } from "sonner"
 
 interface PersonalData {
   fullName: string
@@ -37,6 +41,9 @@ interface Skills {
 }
 
 export function ProfileContent() {
+  const router = useRouter()
+  const { mutate: runPoc, isPending } = useRunPoc()
+
   const [personalData, setPersonalData] = useState<PersonalData>({
     fullName: "Баранов Сергей",
     email: "oldersik@gmail.ru",
@@ -78,6 +85,23 @@ export function ProfileContent() {
     ],
   })
 
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedPersonal = localStorage.getItem("careermate_personal")
+      if (savedPersonal) setPersonalData(JSON.parse(savedPersonal))
+      
+      const savedWork = localStorage.getItem("careermate_work")
+      if (savedWork) setWorkExperience(JSON.parse(savedWork))
+      
+      const savedEducation = localStorage.getItem("careermate_education")
+      if (savedEducation) setEducation(JSON.parse(savedEducation))
+      
+      const savedSkills = localStorage.getItem("careermate_skills")
+      if (savedSkills) setSkills(JSON.parse(savedSkills))
+    } catch(e) {}
+  }, [])
+
   // Modal states
   const [personalModalOpen, setPersonalModalOpen] = useState(false)
   const [workModalOpen, setWorkModalOpen] = useState(false)
@@ -99,6 +123,7 @@ export function ProfileContent() {
 
   const savePersonalData = () => {
     setPersonalData(tempPersonal)
+    localStorage.setItem("careermate_personal", JSON.stringify(tempPersonal))
     setPersonalModalOpen(false)
   }
 
@@ -121,6 +146,7 @@ export function ProfileContent() {
 
   const saveWorkExperience = () => {
     setWorkExperience(tempWork)
+    localStorage.setItem("careermate_work", JSON.stringify(tempWork))
     setWorkModalOpen(false)
   }
 
@@ -143,6 +169,7 @@ export function ProfileContent() {
 
   const saveEducation = () => {
     setEducation(tempEducation)
+    localStorage.setItem("careermate_education", JSON.stringify(tempEducation))
     setEducationModalOpen(false)
   }
 
@@ -177,7 +204,39 @@ export function ProfileContent() {
 
   const saveSkills = () => {
     setSkills(tempSkills)
+    localStorage.setItem("careermate_skills", JSON.stringify(tempSkills))
     setSkillsModalOpen(false)
+  }
+
+  const handleRunPoc = () => {
+    const totalExperienceYears = tempWork.reduce((acc, current) => {
+        // Very rough experience estimation for PoC
+        return acc + 2; 
+    }, 0);
+
+    const dto: ProfileDto = {
+      fullName: personalData.fullName,
+      phone: personalData.phone,
+      location: personalData.city,
+      desiredPosition: workExperience[0]?.position || "Специалист",
+      experienceYears: totalExperienceYears,
+      education: education,
+      workExperience: workExperience,
+      skills: skills,
+      aboutMe: `Telegram: ${personalData.telegram}\nGitHub: ${personalData.github}\nEmail: ${personalData.email}`,
+    }
+
+    runPoc(dto, {
+      onSuccess: (data) => {
+        toast.success("Анализ успешно завершен!")
+        router.push("/poc/result")
+      },
+      onError: (error) => {
+        toast.error("Ошибка при запуске алгоритма", {
+          description: error.message || "Убедитесь, что бэкенд и Agent запущены"
+        })
+      }
+    })
   }
 
   return (
@@ -604,6 +663,18 @@ export function ProfileContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* PoC Launcher */}
+      <div className="mt-8 pt-6 border-t border-border flex justify-end">
+        <Button 
+          size="lg" 
+          onClick={handleRunPoc} 
+          disabled={isPending}
+          className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg text-base py-6 px-8 animate-in fade-in transition-all"
+        >
+          {isPending ? "🤖 Нейросеть анализирует профиль..." : "🚀 Запустить Killer Flow (AI Анализ)"}
+        </Button>
+      </div>
     </div>
   )
 }

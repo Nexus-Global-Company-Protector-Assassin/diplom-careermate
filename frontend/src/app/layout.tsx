@@ -4,6 +4,7 @@ import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { ThemeProvider } from "@/shared/context/theme-context"
 import { SidebarProvider } from "@/shared/context/sidebar-context"
+import { CoreQueryProvider } from "@/app/providers/query-provider"
 import { ToastProvider } from "@/shared/ui/toast-notification"
 import "./globals.css"
 
@@ -22,11 +23,13 @@ export default function RootLayout({
   return (
     <html lang="ru" suppressHydrationWarning>
       <body className={`font-sans antialiased`}>
-        <ThemeProvider>
-          <SidebarProvider>
-            <ToastProvider>{children}</ToastProvider>
-          </SidebarProvider>
-        </ThemeProvider>
+        <CoreQueryProvider>
+          <ThemeProvider>
+            <SidebarProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </SidebarProvider>
+          </ThemeProvider>
+        </CoreQueryProvider>
         <Analytics />
       </body>
     </html>
