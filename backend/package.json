@@ -62,6 +62,7 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
     "passport-linkedin-oauth2": "^2.0.0",
+    "pg": "^8.20.0",
     "prisma": "^5.8.0",
     "puppeteer": "^21.7.0",
     "reflect-metadata": "^0.2.1",

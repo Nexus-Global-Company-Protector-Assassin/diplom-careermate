@@ -17,6 +17,10 @@ import {
   X,
   Check,
   Building2,
+  Zap,
+  Loader2,
+  ExternalLink,
+  Database,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { Label } from "@/shared/ui/label"
@@ -43,6 +47,20 @@ interface Job {
   match: string
   matchColor: string
   logo: string
+}
+
+interface HhVacancy {
+  id: string
+  hhId: string
+  title: string
+  employer: string
+  location: string | null
+  salaryLabel: string
+  skills: string[]
+  descriptionPreview: string | null
+  experience: string | null
+  schedule: string | null
+  searchQuery: string
 }
 
 const initialJobs: Job[] = [
@@ -123,11 +141,54 @@ export function VacanciesContent() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [appliedJobs, setAppliedJobs] = useState<string[]>([])
 
+  // HH Parser state
+  const [hhVacancies, setHhVacancies] = useState<HhVacancy[]>([])
+  const [hhLoading, setHhLoading] = useState(false)
+  const [hhParsing, setHhParsing] = useState(false)
+  const [hhError, setHhError] = useState<string | null>(null)
+  const [hhQuery, setHhQuery] = useState("")
+
   // Filter states
   const [salaryFrom, setSalaryFrom] = useState("")
   const [salaryTo, setSalaryTo] = useState("")
   const [experience, setExperience] = useState("")
   const [remote, setRemote] = useState(false)
+
+  const loadHhFromDb = async () => {
+    setHhLoading(true)
+    setHhError(null)
+    try {
+      const url = hhQuery
+        ? `/api/vacancies?query=${encodeURIComponent(hhQuery)}&limit=20`
+        : `/api/vacancies?limit=20`
+      const res = await fetch(url)
+      if (!res.ok) throw new Error("Ошибка загрузки")
+      setHhVacancies(await res.json())
+    } catch (e: any) {
+      setHhError(e.message)
+    } finally {
+      setHhLoading(false)
+    }
+  }
+
+  const parseHhAndSave = async () => {
+    const query = hhQuery.trim() || "Разработчик"
+    setHhParsing(true)
+    setHhError(null)
+    try {
+      const res = await fetch(`/api/vacancies/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, count: 10 }),
+      })
+      if (!res.ok) throw new Error("Ошибка парсинга HH")
+      setHhVacancies(await res.json())
+    } catch (e: any) {
+      setHhError(e.message)
+    } finally {
+      setHhParsing(false)
+    }
+  }
 
   const toggleFavorite = (id: string) => {
     setFavorites((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]))
@@ -172,7 +233,106 @@ export function VacanciesContent() {
         <p className="text-sm sm:text-base text-muted-foreground">Найди идеальную работу с помощью AI-подбора</p>
       </div>
 
-      {/* Search */}
+      {/* HH Parser Section */}
+      <Card className="bg-card border-border shadow-md border-blue-500/20">
+        <CardContent className="pt-5 pb-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-7 w-7 rounded-lg bg-red-500/15 flex items-center justify-center">
+              <Database className="h-4 w-4 text-red-500" />
+            </div>
+            <h2 className="font-semibold text-foreground">Парсинг вакансий с HH.ru</h2>
+            <Badge variant="secondary" className="text-xs">Сохраняется в БД</Badge>
+          </div>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="hh-search-input"
+                className="pl-10"
+                placeholder="Например: React Developer, Data Analyst, DevOps..."
+                value={hhQuery}
+                onChange={(e) => setHhQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && loadHhFromDb()}
+              />
+            </div>
+            <Button
+              id="load-db-btn"
+              variant="outline"
+              onClick={loadHhFromDb}
+              disabled={hhLoading || hhParsing}
+            >
+              {hhLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+              <span className="ml-1.5 hidden sm:inline">Из БД</span>
+            </Button>
+            <Button
+              id="parse-hh-btn"
+              onClick={parseHhAndSave}
+              disabled={hhLoading || hhParsing}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {hhParsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              <span className="ml-1.5">{hhParsing ? "Парсим…" : "Спарсить"}</span>
+            </Button>
+          </div>
+          {hhError && (
+            <p className="text-xs text-destructive mt-2">{hhError}</p>
+          )}
+
+          {/* HH Results */}
+          {(hhLoading || hhParsing) && (
+            <div className="flex items-center gap-2 mt-4 text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {hhParsing ? "Парсим HH.ru и сохраняем в базу данных…" : "Загружаем из БД…"}
+            </div>
+          )}
+
+          {!hhLoading && !hhParsing && hhVacancies.length > 0 && (
+            <div className="mt-4 space-y-3">
+              <p className="text-xs text-muted-foreground">Найдено {hhVacancies.length} вакансий в БД</p>
+              {hhVacancies.map((vac) => (
+                <div
+                  key={vac.id}
+                  className="rounded-lg border border-border bg-background p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-sm text-foreground truncate">{vac.title}</h3>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {vac.employer}
+                        {vac.location && ` • ${vac.location}`}
+                        {vac.experience && ` • ${vac.experience}`}
+                      </p>
+                      {vac.descriptionPreview && (
+                        <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{vac.descriptionPreview}</p>
+                      )}
+                      {vac.skills && vac.skills.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {vac.skills.slice(0, 5).map((skill, si) => (
+                            <span key={si} className="text-xs bg-muted/60 px-2 py-0.5 rounded-full">{skill}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-semibold text-green-600 dark:text-green-400">{vac.salaryLabel}</p>
+                      <a
+                        href={`https://hh.ru/vacancy/${vac.hhId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <ExternalLink className="h-3 w-3" /> hh.ru
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
       <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

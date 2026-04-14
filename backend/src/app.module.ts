@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ProfilesModule } from './modules/profiles/profiles.module';
 import { PocModule } from './modules/poc/poc.module';
+import { VacanciesModule } from './modules/vacancies/vacancies.module';
 import { HealthController } from './health.controller';
 import { AppController } from './app.controller';
 import { UsersModule } from './modules/users/users.module';
@@ -29,6 +30,7 @@ import { RedisModule } from './modules/redis/redis.module';
         RedisModule,
         ProfilesModule,
         PocModule,
+        VacanciesModule,
     ],
     controllers: [HealthController, AppController],
     providers: [],

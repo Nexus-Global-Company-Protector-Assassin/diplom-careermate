@@ -69,3 +69,22 @@ model Resume {
   version   Int      @default(1)
   createdAt DateTime @default(now())
 }
+
+model Vacancy {
+  id                 String   @id @default(uuid())
+  hhId               String   @unique  // ID вакансии на HH.ru
+  title              String
+  employer           String
+  location           String?
+  salaryFrom         Int?
+  salaryTo           Int?
+  salaryCurrency     String?
+  salaryLabel        String?
+  skills             Json?    // Массив ключевых навыков
+  descriptionPreview String?
+  experience         String?
+  schedule           String?
+  searchQuery        String   // Поисковый запрос, по которому найдена вакансия
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
