@@ -1,0 +1,31 @@
+{
+  "targetPosition": "Junior React Developer",
+  "fullName": "Алексей Иванов",
+  "summary": "Алексей — студент и начинающий frontend-разработчик с опытом в React через учебные и пет-проекты. Уверенно использует TypeScript, а также HTML и CSS для создания интерфейсов. Готов к задачам по UI в небольшой продуктовой команде и ориентирован на наставничество. Ищет первую работу Junior React Developer в Startup Hub (Remote).",
+  "skills": [
+    "React",
+    "TypeScript",
+    "HTML",
+    "CSS"
+  ],
+  "experience": [
+    {
+      "company": "Пет-проекты",
+      "position": "Frontend Developer (React, для учебных проектов)",
+      "period": "—",
+      "achievements": [
+        "Разрабатывал интерфейсы на React в рамках пет-проекта",
+        "Применял TypeScript при разработке фронтенда",
+        "Верстал и оформлял компоненты с использованием HTML и CSS"
+      ]
+    }
+  ],
+  "education": [],
+  "languages": [],
+  "contacts": {
+    "email": "",
+    "phone": "",
+    "linkedin": "",
+    "github": ""
+  }
+}
