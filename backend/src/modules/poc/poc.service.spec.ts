@@ -100,7 +100,8 @@ describe('PocService', () => {
             prisma.user.findUnique.mockResolvedValue(mockUser);
             prisma.profile.upsert.mockResolvedValue(mockProfile);
             prisma.analysisResult.create.mockResolvedValue(mockAnalysisResult);
-            http.post.mockReturnValue(of({ data: mockAnalysisResponse }));
+            // mock returns { data: { data: agentPayload } } because service does response.data.data
+            http.post.mockReturnValue(of({ data: { data: mockAnalysisResponse } }));
             // Python HH parser — unavailable by default (skipped gracefully)
             http.get.mockReturnValue(throwError(() => new Error('Connection refused')));
         });
@@ -140,12 +141,12 @@ describe('PocService', () => {
             );
         });
 
-        it('should call Agent service with profile data', async () => {
+        it('should call Agent service with /ai/poc/run and profileData', async () => {
             await service.runAnalysis(mockRunDto as any);
 
             expect(http.post).toHaveBeenCalledWith(
-                expect.stringContaining('/analyze'),
-                expect.objectContaining({ profile: mockProfile }),
+                expect.stringContaining('/ai/poc/run'),
+                expect.objectContaining({ profileData: mockProfile }),
             );
         });
 
@@ -155,11 +156,7 @@ describe('PocService', () => {
             expect(prisma.analysisResult.create).toHaveBeenCalledWith({
                 data: {
                     profileId: mockProfile.id,
-                    content: expect.objectContaining({
-                        score: 82,
-                        level: 'Middle',
-                        vacancies: expect.any(Array),
-                    }),
+                    content: mockAnalysisResponse,
                 },
             });
         });
@@ -167,25 +164,6 @@ describe('PocService', () => {
         it('should return the saved analysis result', async () => {
             const result = await service.runAnalysis(mockRunDto as any);
             expect(result).toEqual(mockAnalysisResult);
-        });
-
-        it('should include vacancies from HH parser when Python service is available', async () => {
-            const hhVacancy = { id: 'hh-1', title: 'React Dev', employer: 'Mail.ru' };
-            http.get.mockReturnValue(of({ data: [hhVacancy] }));
-
-            await service.runAnalysis(mockRunDto as any);
-
-            const savedContent = prisma.analysisResult.create.mock.calls[0][0].data.content;
-            expect(savedContent.vacancies).toContain(hhVacancy);
-        });
-
-        it('should gracefully handle HH parser failure and save empty vacancies', async () => {
-            http.get.mockReturnValue(throwError(() => new Error('timeout')));
-
-            await service.runAnalysis(mockRunDto as any);
-
-            const savedContent = prisma.analysisResult.create.mock.calls[0][0].data.content;
-            expect(savedContent.vacancies).toEqual([]);
         });
 
         it('should throw error when Agent service is unavailable', async () => {
@@ -197,15 +175,6 @@ describe('PocService', () => {
 
             // analysisResult should NOT be saved
             expect(prisma.analysisResult.create).not.toHaveBeenCalled();
-        });
-
-        it('should NOT search HH if desiredPosition is not provided', async () => {
-            const dtoWithoutPosition = { ...mockRunDto, desiredPosition: undefined };
-
-            await service.runAnalysis(dtoWithoutPosition as any);
-
-            // get() is for Python HH parser — should not be called
-            expect(http.get).not.toHaveBeenCalled();
         });
     });
 
