@@ -59,30 +59,14 @@ export class PocService {
 
         try {
             const response = await firstValueFrom(
-                this.httpService.post(`${agentUrl}/analyze`, {
-                    profile,
+                this.httpService.post(`${agentUrl}/ai/poc/run`, {
+                    profileData: profile,
                 })
             );
-            const analysis = response.data as any;
+            const agentData = response.data.data;
 
-            // Parallel Search for Real Vacancies from HH via Python Service
-            let matchingVacancies: any[] = [];
-            if (dto.desiredPosition) {
-                try {
-                    const pyRes = await firstValueFrom(
-                        this.httpService.get(`http://localhost:5000/parse?query=${encodeURIComponent(dto.desiredPosition)}`)
-                    );
-                    matchingVacancies = pyRes.data || [];
-                } catch (pyErr) {
-                    console.error('Python HH Parser failed or not running on port 5000', pyErr.message);
-                }
-            }
-            
-            // Combine Results
-            const finalResultData = {
-                ...analysis,
-                vacancies: matchingVacancies
-            };
+            // The Agent handles analysis, vacancy matching, and resume generation internally
+            const finalResultData = agentData;
 
             // 4. Save Result
             const result = await this.prisma.analysisResult.create({

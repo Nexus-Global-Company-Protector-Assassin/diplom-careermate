@@ -26,6 +26,27 @@ export interface AnalysisResultDto {
 
 export interface PocRunResponseDto {
     analysis: AnalysisResultDto;
-    vacancies: any[]; // define stricter when mapping is ready
-    resume: any; // define stricter when mapping is ready
+    vacancies: any[];
+    resume: any;
 }
+
+// Parsed profile returned by the ML Agent after uploading a PDF/DOCX
+export interface ParsedProfileDto {
+    fullName: string;
+    desiredPosition?: string;
+    experienceYears?: number;
+    skills?: string[];
+    education?: any[];
+    workExperience?: any[];
+    aboutMe?: string;
+}
+
+// AI ReAct Chat types
+export interface ChatMessage {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+}
+
+export type ChatResponseDto =
+    | { type: 'result'; data: any; message: string }
+    | { type: 'questions'; data: string[]; message: string };

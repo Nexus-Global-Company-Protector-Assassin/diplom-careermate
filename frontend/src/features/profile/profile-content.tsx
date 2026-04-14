@@ -1,15 +1,16 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
 import { Label } from "@/shared/ui/label"
-import { User, Briefcase, GraduationCap, Wrench, X, Plus, Trash2 } from "lucide-react"
+import { User, Briefcase, GraduationCap, Wrench, X, Plus, Trash2, Upload, Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { useRouter } from "next/navigation"
 import { useRunPoc } from "@/features/poc/api/use-run-poc"
-import { ProfileDto } from "@/shared/api"
+import { useUploadResume } from "@/features/profile/api/use-upload-resume"
+import { ProfileDto, ParsedProfileDto, PocRunResponseDto } from "@/shared/api"
 import { toast } from "sonner"
 
 interface PersonalData {
@@ -43,6 +44,42 @@ interface Skills {
 export function ProfileContent() {
   const router = useRouter()
   const { mutate: runPoc, isPending } = useRunPoc()
+  const { mutate: uploadResume, isPending: isUploading } = useUploadResume()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    uploadResume(file, {
+      onSuccess: (parsed: ParsedProfileDto) => {
+        toast.success(`✅ Резюме разобрано! Привет, ${parsed.fullName}!`)
+        // Auto-fill profile from parsed AI data
+        setPersonalData(prev => ({ ...prev, fullName: parsed.fullName || prev.fullName }))
+        if (parsed.desiredPosition) {
+          setWorkExperience(prev => prev.map((w, i) => i === 0 ? { ...w, position: parsed.desiredPosition! } : w))
+        }
+        if (Array.isArray(parsed.skills) && parsed.skills.length > 0) {
+          setSkills(prev => ({ ...prev, technical: parsed.skills! }))
+        }
+        if (Array.isArray(parsed.workExperience) && parsed.workExperience.length > 0) {
+          const mapped = parsed.workExperience.map((w: any, i: number) => ({
+            id: String(Date.now() + i),
+            position: w.position || w.jobTitle || "",
+            company: w.company || w.employer || "",
+            period: w.period || w.years || "",
+          }))
+          setWorkExperience(mapped)
+        }
+      },
+      onError: (err: Error) => {
+        toast.error("Не удалось разобрать резюме", { description: err.message })
+      }
+    })
+
+    // Reset input so same file can be re-uploaded
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
 
   const [personalData, setPersonalData] = useState<PersonalData>({
     fullName: "Баранов Сергей",
@@ -90,16 +127,16 @@ export function ProfileContent() {
     try {
       const savedPersonal = localStorage.getItem("careermate_personal")
       if (savedPersonal) setPersonalData(JSON.parse(savedPersonal))
-      
+
       const savedWork = localStorage.getItem("careermate_work")
       if (savedWork) setWorkExperience(JSON.parse(savedWork))
-      
+
       const savedEducation = localStorage.getItem("careermate_education")
       if (savedEducation) setEducation(JSON.parse(savedEducation))
-      
+
       const savedSkills = localStorage.getItem("careermate_skills")
       if (savedSkills) setSkills(JSON.parse(savedSkills))
-    } catch(e) {}
+    } catch (e) { }
   }, [])
 
   // Modal states
@@ -210,8 +247,8 @@ export function ProfileContent() {
 
   const handleRunPoc = () => {
     const totalExperienceYears = tempWork.reduce((acc, current) => {
-        // Very rough experience estimation for PoC
-        return acc + 2; 
+      // Very rough experience estimation for PoC
+      return acc + 2;
     }, 0);
 
     const dto: ProfileDto = {
@@ -227,11 +264,11 @@ export function ProfileContent() {
     }
 
     runPoc(dto, {
-      onSuccess: (data) => {
+      onSuccess: (_data: PocRunResponseDto) => {
         toast.success("Анализ успешно завершен!")
         router.push("/poc/result")
       },
-      onError: (error) => {
+      onError: (error: Error) => {
         toast.error("Ошибка при запуске алгоритма", {
           description: error.message || "Убедитесь, что бэкенд и Agent запущены"
         })
@@ -664,12 +701,31 @@ export function ProfileContent() {
         </DialogContent>
       </Dialog>
 
-      {/* PoC Launcher */}
-      <div className="mt-8 pt-6 border-t border-border flex justify-end">
-        <Button 
-          size="lg" 
-          onClick={handleRunPoc} 
-          disabled={isPending}
+      {/* PoC Launcher & Resume Upload */}
+      <div className="mt-8 pt-6 border-t border-border flex flex-wrap gap-3 justify-end">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          className="hidden"
+          onChange={handleFileUpload}
+        />
+        <Button
+          size="lg"
+          variant="outline"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading || isPending}
+          className="border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 py-6 px-6"
+        >
+          {isUploading
+            ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Разбираем резюме...</>
+            : <><Upload className="h-4 w-4 mr-2" />Загрузить резюме (PDF/DOCX)</>}
+        </Button>
+        <Button
+          size="lg"
+          onClick={handleRunPoc}
+          disabled={isPending || isUploading}
           className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg text-base py-6 px-8 animate-in fade-in transition-all"
         >
           {isPending ? "🤖 Нейросеть анализирует профиль..." : "🚀 Запустить Killer Flow (AI Анализ)"}
