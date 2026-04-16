@@ -89,11 +89,13 @@ export function VacanciesContent() {
 
   // HH Parser state
   const [hhQuery, setHhQuery] = useState("")
-  const { data: hhVacanciesData, isLoading: hhLoading, refetch: refetchHh } = useHhVacancies(hhQuery)
+  // activeSearchQuery is what was actually sent to DB — updated on loadHhFromDb or after parse
+  const [activeSearchQuery, setActiveSearchQuery] = useState("")
+  const { data: hhVacanciesData, isLoading: hhLoading, refetch: refetchHh } = useHhVacancies(activeSearchQuery)
   const { mutateAsync: parseHhApi, isPending: hhParsing } = useHhParse()
-  
+
   const [hhError, setHhError] = useState<string | null>(null)
-  
+
   const hhVacancies = hhVacanciesData || []
 
   // Filter states
@@ -104,6 +106,7 @@ export function VacanciesContent() {
 
   const loadHhFromDb = async () => {
     setHhError(null)
+    setActiveSearchQuery(hhQuery)
     try {
       await refetchHh()
     } catch (e: any) {
@@ -116,6 +119,8 @@ export function VacanciesContent() {
     setHhError(null)
     try {
       await parseHhApi({ query, count: 10 })
+      // Update activeSearchQuery so useHhVacancies re-fetches with the right query
+      setActiveSearchQuery(query)
     } catch (e: any) {
       setHhError(e.message)
     }
@@ -423,30 +428,30 @@ export function VacanciesContent() {
           {isResponsesLoading ? (
             <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Загрузка откликов...</div>
           ) : (
-          <table className="w-full min-w-[500px]">
-            <thead>
-              <tr className="border-b border-border text-left text-sm text-muted-foreground">
-                <th className="p-4 font-medium">Вакансия</th>
-                <th className="p-4 font-medium">Компания</th>
-                <th className="p-4 font-medium">Дата</th>
-                <th className="p-4 font-medium">Статус</th>
-                <th className="p-4 font-medium">Ответ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(responsesData || []).map((row: any) => (
-                <tr key={row.id} className="border-b border-border last:border-0">
-                  <td className="p-4 text-card-foreground">{row.title}</td>
-                  <td className="p-4 text-card-foreground">{row.company}</td>
-                  <td className="p-4 text-card-foreground">{row.date}</td>
-                  <td className="p-4">
-                    <Badge className={`${row.statusColor} text-white`}>{row.status}</Badge>
-                  </td>
-                  <td className="p-4 text-muted-foreground">—</td>
+            <table className="w-full min-w-[500px]">
+              <thead>
+                <tr className="border-b border-border text-left text-sm text-muted-foreground">
+                  <th className="p-4 font-medium">Вакансия</th>
+                  <th className="p-4 font-medium">Компания</th>
+                  <th className="p-4 font-medium">Дата</th>
+                  <th className="p-4 font-medium">Статус</th>
+                  <th className="p-4 font-medium">Ответ</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(responsesData || []).map((row: any) => (
+                  <tr key={row.id} className="border-b border-border last:border-0">
+                    <td className="p-4 text-card-foreground">{row.title}</td>
+                    <td className="p-4 text-card-foreground">{row.company}</td>
+                    <td className="p-4 text-card-foreground">{row.date}</td>
+                    <td className="p-4">
+                      <Badge className={`${row.statusColor} text-white`}>{row.status}</Badge>
+                    </td>
+                    <td className="p-4 text-muted-foreground">—</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </CardContent>
       </Card>
