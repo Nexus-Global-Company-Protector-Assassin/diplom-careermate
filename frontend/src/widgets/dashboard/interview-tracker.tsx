@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import { Badge } from "@/shared/ui/badge"
@@ -9,6 +9,7 @@ import { Label } from "@/shared/ui/label"
 import { Calendar, Clock, MapPin, Video, Building2, Plus, X, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select"
+import { useInterviews, useCreateInterview, useUpdateInterviewStatus } from "./api/use-interviews"
 
 interface Interview {
   id: string
@@ -22,43 +23,19 @@ interface Interview {
   notes?: string
 }
 
-const initialInterviews: Interview[] = [
-  {
-    id: "1",
-    company: "Yandex",
-    position: "Senior Data Analyst",
-    date: "2025-01-15",
-    time: "14:00",
-    type: "online",
-    location: "Zoom",
-    status: "upcoming",
-    notes: "Техническое интервью",
-  },
-  {
-    id: "2",
-    company: "Sber",
-    position: "Data Analyst",
-    date: "2025-01-18",
-    time: "11:00",
-    type: "office",
-    location: "Москва, ул. Вавилова, 19",
-    status: "upcoming",
-    notes: "HR-собеседование",
-  },
-  {
-    id: "3",
-    company: "VK",
-    position: "Product Analyst",
-    date: "2025-01-10",
-    time: "16:00",
-    type: "online",
-    location: "Google Meet",
-    status: "completed",
-  },
-]
+
 
 export function InterviewTracker() {
-  const [interviews, setInterviews] = useState<Interview[]>(initialInterviews)
+  const { data: dbInterviews } = useInterviews()
+  const { mutate: createInterview } = useCreateInterview()
+  const { mutate: updateStatusApi } = useUpdateInterviewStatus()
+
+  const [interviews, setInterviews] = useState<Interview[]>([])
+  
+  useEffect(() => {
+    if (dbInterviews) setInterviews(dbInterviews)
+  }, [dbInterviews])
+
   const [modalOpen, setModalOpen] = useState(false)
   const [newInterview, setNewInterview] = useState<Partial<Interview>>({
     type: "online",
@@ -67,23 +44,20 @@ export function InterviewTracker() {
 
   const addInterview = () => {
     if (newInterview.company && newInterview.position && newInterview.date && newInterview.time) {
-      setInterviews([
-        ...interviews,
-        {
-          ...newInterview,
-          id: Date.now().toString(),
-          type: newInterview.type || "online",
-          status: "upcoming",
-          location: newInterview.location || "",
-        } as Interview,
-      ])
+      createInterview({
+        ...newInterview,
+        type: newInterview.type || "online",
+        status: "upcoming",
+        location: newInterview.location || "",
+      })
       setModalOpen(false)
       setNewInterview({ type: "online", status: "upcoming" })
     }
   }
 
   const updateStatus = (id: string, status: Interview["status"]) => {
-    setInterviews(interviews.map((i) => (i.id === id ? { ...i, status } : i)))
+    setInterviews((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)))
+    updateStatusApi({ id, status })
   }
 
   const upcomingInterviews = interviews.filter((i) => i.status === "upcoming")

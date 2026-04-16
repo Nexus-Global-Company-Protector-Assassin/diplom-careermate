@@ -1,15 +1,11 @@
-import { Controller, Post, Body, Get, Put, Delete, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { Controller, Post, Body, Get, Put, Delete, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { ProfilesService } from './profiles.service';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CurrentUser } from '../auth/current-user.decorator';
 
 @ApiTags('Profiles')
 @Controller('profiles')
-@UseGuards(JwtAuthGuard)
-@ApiBearerAuth()
 export class ProfilesController {
     constructor(private readonly profilesService: ProfilesService) { }
 
@@ -19,10 +15,9 @@ export class ProfilesController {
     @ApiResponse({ status: 201, description: 'Profile created/updated successfully' })
     @ApiResponse({ status: 401, description: 'Unauthorized' })
     async createProfile(
-        @CurrentUser() user: any,
         @Body() createProfileDto: CreateProfileDto,
     ) {
-        return this.profilesService.createProfile(user.userId, createProfileDto);
+        return this.profilesService.createProfile(undefined, createProfileDto);
     }
 
     @Get('me')
@@ -30,8 +25,8 @@ export class ProfilesController {
     @ApiResponse({ status: 200, description: 'Returns the user profile' })
     @ApiResponse({ status: 401, description: 'Unauthorized' })
     @ApiResponse({ status: 404, description: 'Profile not found' })
-    async getProfile(@CurrentUser() user: any) {
-        return this.profilesService.getProfile(user.userId);
+    async getProfile() {
+        return this.profilesService.getProfile(undefined);
     }
 
     @Put('me')
@@ -41,10 +36,9 @@ export class ProfilesController {
     @ApiResponse({ status: 401, description: 'Unauthorized' })
     @ApiResponse({ status: 404, description: 'Profile not found' })
     async updateProfile(
-        @CurrentUser() user: any,
         @Body() updateProfileDto: UpdateProfileDto,
     ) {
-        return this.profilesService.updateProfile(user.userId, updateProfileDto);
+        return this.profilesService.updateProfile(undefined, updateProfileDto);
     }
 
     @Delete('me')
@@ -53,8 +47,8 @@ export class ProfilesController {
     @ApiResponse({ status: 200, description: 'Profile deleted successfully' })
     @ApiResponse({ status: 401, description: 'Unauthorized' })
     @ApiResponse({ status: 404, description: 'Profile not found' })
-    async deleteProfile(@CurrentUser() user: any) {
-        return this.profilesService.deleteProfile(user.userId);
+    async deleteProfile() {
+        return this.profilesService.deleteProfile(undefined);
     }
 }
 

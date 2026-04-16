@@ -42,6 +42,8 @@ export const GeneratedResumeSchema = z.object({
             github: z.string().optional(),
         })
         .optional(),
+    recommendations: z.array(z.string()).describe('Рекомендации по ручному улучшению: что юзеру нужно дописать самому (метрики, детали и т.д.)').optional(),
+    autoFixed: z.array(z.string()).describe('Список улучшений, которые ИИ применил автоматически (например, переписал summary, убрал лишние навыки)').optional(),
 });
 
 export type GeneratedResume = z.infer<typeof GeneratedResumeSchema>;

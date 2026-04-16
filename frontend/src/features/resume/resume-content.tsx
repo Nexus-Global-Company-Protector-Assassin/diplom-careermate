@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import { Badge } from "@/shared/ui/badge"
@@ -24,62 +24,38 @@ import {
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { CoverLetterGenerator } from "@/features/resume/cover-letter-generator"
+import { useResumesHistory, useSaveResume, useDeleteResume } from "./api/use-resumes"
+import { useUploadResume } from "@/features/profile/api/use-upload-resume"
 
 interface ResumeCard {
   id: string
   title: string
   subtitle: string
+  content?: string
   updated: string
   status: "Активное" | "Устаревшее" | "Черновик"
   statusColor: string
 }
 
 export function ResumeContent() {
-  const [resumeCards, setResumeCards] = useState<ResumeCard[]>([
-    {
-      id: "1",
-      title: "Data Analyst - Современный",
-      subtitle: "Шаблон: Modern, Сценарий",
-      updated: "8 июля 2025",
-      status: "Активное",
-      statusColor: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-    },
-    {
-      id: "2",
-      title: "Data Analyst - Классический",
-      subtitle: "Шаблон: Classic, 1 Сценарий",
-      updated: "Апрель 8 дней",
-      status: "Устаревшее",
-      statusColor: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    },
-    {
-      id: "3",
-      title: "Junior Developer",
-      subtitle: "Шаблон: Creative, Тип: HTML",
-      updated: "Создано 1 дня",
-      status: "Черновик",
-      statusColor: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400",
-    },
-  ])
+  const { data: historyData } = useResumesHistory()
+  const { mutate: saveResume, isPending: isSaving } = useSaveResume()
+  const { mutate: deleteResume, isPending: isDeleting } = useDeleteResume()
+  const { mutate: uploadToAgent, isPending: isParsing } = useUploadResume()
 
-  const [resumeTable, setResumeTable] = useState([
-    {
-      id: "t1",
-      name: "Data Analyst",
-      company: "Yandex",
-      date: "12.01.2025",
-      status: "Отправлено",
-      statusColor: "bg-emerald-500",
-    },
-    {
-      id: "t2",
-      name: "Ofter",
-      company: "Analytics Lead",
-      date: "10.01.2025",
-      status: "Загружено",
-      statusColor: "bg-blue-500",
-    },
-  ])
+  const [resumeCards, setResumeCards] = useState<ResumeCard[]>([])
+  const [resumeTable, setResumeTable] = useState<any[]>([])
+
+  useEffect(() => {
+    if (historyData?.resumes) {
+      setResumeCards(historyData.resumes)
+    }
+    if (historyData?.history) {
+      setResumeTable(historyData.history)
+    }
+  }, [historyData])
+
+
 
   const [checklistItems, setChecklistItems] = useState([
     { id: "c1", text: "Заголовок профиля оптимизирован", done: true },
@@ -123,18 +99,57 @@ export function ResumeContent() {
 
   const handleUpload = () => {
     if (uploadedFile && resumeTitle) {
-      const newResume: ResumeCard = {
-        id: Date.now().toString(),
-        title: resumeTitle,
-        subtitle: `Файл: ${uploadedFile.name}`,
-        updated: new Date().toLocaleDateString("ru-RU"),
-        status: "Черновик",
-        statusColor: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400",
-      }
-      setResumeCards([newResume, ...resumeCards])
-      setUploadModalOpen(false)
-      setUploadedFile(null)
-      setResumeTitle("")
+      uploadToAgent(uploadedFile, {
+        onSuccess: (parsedData) => {
+          // Format parsed data for beautiful display
+          let formattedContent = `Анализ резюме от AI Агента:\n\n`
+          if (parsedData.fullName) formattedContent += `ФИО: ${parsedData.fullName}\n`
+          if (parsedData.desiredPosition) formattedContent += `Должность: ${parsedData.desiredPosition}\n`
+          if (parsedData.skills && parsedData.skills.length > 0) {
+            formattedContent += `\nКлючевые навыки: ${parsedData.skills.join(", ")}\n`
+          }
+          if (parsedData.workExperience && parsedData.workExperience.length > 0) {
+            formattedContent += `\nОпыт работы:\n`
+            parsedData.workExperience.forEach((we: any) => {
+              formattedContent += `- ${we.jobTitle || we.position} в ${we.employer || we.company} (${we.years || we.period})\n`
+            })
+          }
+          if (parsedData.education && parsedData.education.length > 0) {
+            formattedContent += `\nОбразование:\n`
+            parsedData.education.forEach((ed: any) => {
+              formattedContent += `- ${ed.institution} (${ed.degree || ''}, ${ed.graduationYear || ''})\n`
+            })
+          }
+
+          saveResume({
+            title: resumeTitle,
+            subtitle: `Файл: ${uploadedFile.name}`,
+            type: 'uploaded_file',
+            content: formattedContent
+          }, {
+            onSuccess: () => {
+              setUploadModalOpen(false)
+              setUploadedFile(null)
+              setResumeTitle("")
+            }
+          })
+        },
+        onError: () => {
+          // Fallback if AI parser fails
+          saveResume({
+            title: resumeTitle,
+            subtitle: `Файл: ${uploadedFile.name}`,
+            type: 'uploaded_file',
+            content: `[Ошибка: Не удалось распознать документ AI Агентом. Файл загружен без анализа.]`
+          }, {
+            onSuccess: () => {
+              setUploadModalOpen(false)
+              setUploadedFile(null)
+              setResumeTitle("")
+            }
+          })
+        }
+      })
     }
   }
 
@@ -151,7 +166,7 @@ export function ResumeContent() {
   }
 
   const handleDelete = (id: string) => {
-    setResumeCards(resumeCards.filter((r) => r.id !== id))
+    deleteResume(id)
   }
 
   const handleToggleChecklist = (id: string) => {
@@ -391,10 +406,10 @@ export function ResumeContent() {
             </Button>
             <Button
               onClick={handleUpload}
-              disabled={!uploadedFile || !resumeTitle}
+              disabled={!uploadedFile || !resumeTitle || isSaving || isParsing}
               className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 w-full sm:w-auto"
             >
-              Загрузить
+              {isParsing ? "Анализируем (AI)..." : isSaving ? "Загрузка..." : "Загрузить"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -407,10 +422,18 @@ export function ResumeContent() {
             <DialogTitle className="text-card-foreground">{selectedResume?.title}</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <div className="bg-muted rounded-lg p-8 text-center min-h-[300px] flex flex-col items-center justify-center">
-              <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-              <p className="text-card-foreground font-medium">Предпросмотр резюме</p>
-              <p className="text-sm text-muted-foreground mt-2">{selectedResume?.subtitle}</p>
+            <div className="bg-muted rounded-lg p-6 min-h-[300px] flex flex-col text-sm border border-border">
+              {selectedResume?.content ? (
+                <div className="flex-1 whitespace-pre-wrap text-card-foreground">
+                  {selectedResume.content}
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center">
+                  <FileText className="h-16 w-16 text-muted-foreground mb-4" />
+                  <p className="text-card-foreground font-medium">Нет содержимого для предпросмотра</p>
+                  <p className="text-muted-foreground mt-2">{selectedResume?.subtitle}</p>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">

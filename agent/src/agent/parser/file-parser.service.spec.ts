@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { FileParserService } from './file-parser.service';
+// @ts-ignore
 import * as pdfParse from 'pdf-parse';
+// @ts-ignore
 import * as mammoth from 'mammoth';
 
 jest.mock('pdf-parse', () => jest.fn().mockResolvedValue({ text: 'parsed pdf text' }));

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import { Badge } from "@/shared/ui/badge"
@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/shared/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select"
 import { Checkbox } from "@/shared/ui/checkbox"
+import { useRecommendedVacancies, useResponses, useApplyToVacancy, useToggleFavorite, useHhVacancies, useHhParse } from "./api/use-vacancies"
 
 const filterTags = ["Data Analyst", "Python", "SQL", "Remote", "Настроить фильтры"]
 
@@ -63,77 +64,15 @@ interface HhVacancy {
   searchQuery: string
 }
 
-const initialJobs: Job[] = [
-  {
-    id: "1",
-    company: "Yandex",
-    title: "Senior Data Analyst",
-    location: "Москва",
-    type: "Полная",
-    posted: "2 дня назад",
-    skills: ["Python", "SQL", "Tableau"],
-    salary: "200 000 - 300 000 ₽",
-    match: "92%",
-    matchColor: "text-green-600 bg-green-50",
-    logo: "Y",
-  },
-  {
-    id: "2",
-    company: "Sber",
-    title: "Data Analyst",
-    location: "Удалённо",
-    type: "Полная",
-    posted: "5 дней назад",
-    skills: ["Power BI", "SQL", "Excel"],
-    salary: "180 000 - 250 000 ₽",
-    match: "81%",
-    matchColor: "text-blue-600 bg-blue-50",
-    logo: "S",
-  },
-  {
-    id: "3",
-    company: "VK",
-    title: "Product Analyst",
-    location: "Санкт-Петербург",
-    type: "Полная",
-    posted: "1 неделю назад",
-    skills: ["Python", "Clickhouse", "Airflow"],
-    salary: "220 000 - 280 000 ₽",
-    match: "78%",
-    matchColor: "text-blue-600 bg-blue-50",
-    logo: "V",
-  },
-]
 
-const jobTable = [
-  {
-    id: "t1",
-    title: "Data Analyst",
-    company: "Yandex",
-    date: "12.01.2025",
-    status: "Рассматривается",
-    statusColor: "bg-blue-500",
-  },
-  {
-    id: "t2",
-    title: "Senior Analyst",
-    company: "Soar",
-    date: "10.10.2025",
-    status: "Приглашение",
-    statusColor: "bg-green-500",
-  },
-  {
-    id: "t3",
-    title: "Data Scientist",
-    company: "VK",
-    date: "08.11.2025",
-    status: "Интервью",
-    statusColor: "bg-yellow-500",
-  },
-]
 
 export function VacanciesContent() {
-  const [jobs, setJobs] = useState<Job[]>(initialJobs)
+  const { data: recommendedJobs, isLoading: isJobsLoading } = useRecommendedVacancies()
+  const { data: responsesData, isLoading: isResponsesLoading } = useResponses()
+  const { mutate: applyToJob } = useApplyToVacancy()
+  const { mutate: toggleFavApi } = useToggleFavorite()
+
+  const [jobs, setJobs] = useState<Job[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [filterModalOpen, setFilterModalOpen] = useState(false)
@@ -141,12 +80,21 @@ export function VacanciesContent() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [appliedJobs, setAppliedJobs] = useState<string[]>([])
 
+  // Load backend data into state
+  useEffect(() => {
+    if (recommendedJobs && recommendedJobs.length > 0) {
+      setJobs(recommendedJobs)
+    }
+  }, [recommendedJobs])
+
   // HH Parser state
-  const [hhVacancies, setHhVacancies] = useState<HhVacancy[]>([])
-  const [hhLoading, setHhLoading] = useState(false)
-  const [hhParsing, setHhParsing] = useState(false)
-  const [hhError, setHhError] = useState<string | null>(null)
   const [hhQuery, setHhQuery] = useState("")
+  const { data: hhVacanciesData, isLoading: hhLoading, refetch: refetchHh } = useHhVacancies(hhQuery)
+  const { mutateAsync: parseHhApi, isPending: hhParsing } = useHhParse()
+  
+  const [hhError, setHhError] = useState<string | null>(null)
+  
+  const hhVacancies = hhVacanciesData || []
 
   // Filter states
   const [salaryFrom, setSalaryFrom] = useState("")
@@ -155,43 +103,28 @@ export function VacanciesContent() {
   const [remote, setRemote] = useState(false)
 
   const loadHhFromDb = async () => {
-    setHhLoading(true)
     setHhError(null)
     try {
-      const url = hhQuery
-        ? `/api/vacancies?query=${encodeURIComponent(hhQuery)}&limit=20`
-        : `/api/vacancies?limit=20`
-      const res = await fetch(url)
-      if (!res.ok) throw new Error("Ошибка загрузки")
-      setHhVacancies(await res.json())
+      await refetchHh()
     } catch (e: any) {
       setHhError(e.message)
-    } finally {
-      setHhLoading(false)
     }
   }
 
   const parseHhAndSave = async () => {
     const query = hhQuery.trim() || "Разработчик"
-    setHhParsing(true)
     setHhError(null)
     try {
-      const res = await fetch(`/api/vacancies/search`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, count: 10 }),
-      })
-      if (!res.ok) throw new Error("Ошибка парсинга HH")
-      setHhVacancies(await res.json())
+      await parseHhApi({ query, count: 10 })
     } catch (e: any) {
       setHhError(e.message)
-    } finally {
-      setHhParsing(false)
     }
   }
 
   const toggleFavorite = (id: string) => {
-    setFavorites((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]))
+    const isFav = !favorites.includes(id)
+    setFavorites((prev) => (isFav ? [...prev, id] : prev.filter((f) => f !== id)))
+    toggleFavApi({ vacancyId: id, isFavorite: isFav })
   }
 
   const handleApply = (job: Job) => {
@@ -201,6 +134,7 @@ export function VacanciesContent() {
 
   const confirmApply = () => {
     if (selectedJob) {
+      applyToJob({ vacancyId: selectedJob.id })
       setAppliedJobs((prev) => [...prev, selectedJob.id])
       setApplyModalOpen(false)
       setSelectedJob(null)
@@ -209,10 +143,10 @@ export function VacanciesContent() {
 
   const applyFilters = () => {
     // Simple filter logic
-    let filtered = initialJobs
+    let filtered = recommendedJobs && recommendedJobs.length > 0 ? recommendedJobs : []
 
     if (remote) {
-      filtered = filtered.filter((job) => job.location.toLowerCase().includes("удалённо"))
+      filtered = filtered.filter((job: Job) => job.location.toLowerCase().includes("удалённо"))
     }
 
     setJobs(filtered)
@@ -395,7 +329,7 @@ export function VacanciesContent() {
               Избранные вакансии ({favorites.length})
             </h2>
             <div className="flex flex-wrap gap-2">
-              {initialJobs
+              {jobs
                 .filter((job) => favorites.includes(job.id))
                 .map((job) => (
                   <Badge key={job.id} variant="secondary" className="px-3 py-1.5 gap-2">
@@ -486,6 +420,9 @@ export function VacanciesContent() {
       {/* Jobs Table */}
       <Card className="bg-card border-border">
         <CardContent className="p-0 overflow-x-auto">
+          {isResponsesLoading ? (
+            <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Загрузка откликов...</div>
+          ) : (
           <table className="w-full min-w-[500px]">
             <thead>
               <tr className="border-b border-border text-left text-sm text-muted-foreground">
@@ -497,7 +434,7 @@ export function VacanciesContent() {
               </tr>
             </thead>
             <tbody>
-              {jobTable.map((row) => (
+              {(responsesData || []).map((row: any) => (
                 <tr key={row.id} className="border-b border-border last:border-0">
                   <td className="p-4 text-card-foreground">{row.title}</td>
                   <td className="p-4 text-card-foreground">{row.company}</td>
@@ -510,6 +447,7 @@ export function VacanciesContent() {
               ))}
             </tbody>
           </table>
+          )}
         </CardContent>
       </Card>
 

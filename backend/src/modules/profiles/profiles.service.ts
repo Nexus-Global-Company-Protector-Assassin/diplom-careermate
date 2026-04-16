@@ -19,9 +19,19 @@ function toProfileData(dto: CreateProfileDto | UpdateProfileDto) {
 export class ProfilesService {
     constructor(private prisma: PrismaService) { }
 
-    async getProfile(userId: string) {
+    private async getPocUserId(providedId?: string) {
+        if (providedId) return providedId;
+        let user = await this.prisma.user.findFirst();
+        if (!user) {
+            user = await this.prisma.user.create({ data: { email: 'poc-demo@careermate.ru' } });
+        }
+        return user.id;
+    }
+
+    async getProfile(userId?: string) {
+        const id = await this.getPocUserId(userId);
         const profile = await this.prisma.profile.findUnique({
-            where: { userId },
+            where: { userId: id },
             include: {
                 analysisResults: {
                     orderBy: { createdAt: 'desc' },
@@ -35,33 +45,36 @@ export class ProfilesService {
         return profile;
     }
 
-    async createProfile(userId: string, createProfileDto: CreateProfileDto) {
+    async createProfile(userId: string | undefined, createProfileDto: CreateProfileDto) {
+        const id = await this.getPocUserId(userId);
         const data = toProfileData(createProfileDto);
         return this.prisma.profile.upsert({
-            where: { userId },
+            where: { userId: id },
             update: data,
-            create: { userId, ...data },
+            create: { userId: id, ...data },
         });
     }
 
-    async updateProfile(userId: string, updateProfileDto: UpdateProfileDto) {
-        const profile = await this.prisma.profile.findUnique({ where: { userId } });
+    async updateProfile(userId: string | undefined, updateProfileDto: UpdateProfileDto) {
+        const id = await this.getPocUserId(userId);
+        const profile = await this.prisma.profile.findUnique({ where: { userId: id } });
         if (!profile) {
             throw new NotFoundException('Profile not found. Create a profile first.');
         }
         const data = toProfileData(updateProfileDto);
         return this.prisma.profile.update({
-            where: { userId },
+            where: { userId: id },
             data,
         });
     }
 
-    async deleteProfile(userId: string) {
-        const profile = await this.prisma.profile.findUnique({ where: { userId } });
+    async deleteProfile(userId?: string) {
+        const id = await this.getPocUserId(userId);
+        const profile = await this.prisma.profile.findUnique({ where: { userId: id } });
         if (!profile) {
             throw new NotFoundException('Profile not found');
         }
-        await this.prisma.profile.delete({ where: { userId } });
+        await this.prisma.profile.delete({ where: { userId: id } });
         return { message: 'Profile deleted successfully' };
     }
 }

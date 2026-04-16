@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { VacanciesService } from './vacancies.service';
+import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { HttpService } from '@nestjs/axios';
 import { of, throwError } from 'rxjs';
@@ -70,6 +71,9 @@ describe('VacanciesService', () => {
     let http: ReturnType<typeof makeHttp>;
 
     beforeEach(async () => {
+        jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+        jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+        jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
         prisma = makePrisma();
         http = makeHttp();
 
@@ -84,7 +88,10 @@ describe('VacanciesService', () => {
         service = module.get<VacanciesService>(VacanciesService);
     });
 
-    afterEach(() => jest.clearAllMocks());
+    afterEach(() => {
+        jest.restoreAllMocks();
+        jest.clearAllMocks();
+    });
 
     // ─────────────────────────────── getVacancies ────────────────────────────
     describe('getVacancies', () => {

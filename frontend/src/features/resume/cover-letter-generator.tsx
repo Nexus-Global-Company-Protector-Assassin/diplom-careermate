@@ -7,6 +7,8 @@ import { Label } from "@/shared/ui/label"
 import { Textarea } from "@/shared/ui/textarea"
 import { Sparkles, Copy, RefreshCw } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
+import { useGenerateCoverLetter } from "./api/use-resumes"
+import { useProfile } from "@/features/profile/api/use-profile"
 
 interface CoverLetterGeneratorProps {
   open: boolean
@@ -20,35 +22,25 @@ export function CoverLetterGenerator({ open, onOpenChange }: CoverLetterGenerato
   const [generatedLetter, setGeneratedLetter] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
 
-  const generateLetter = () => {
+  const { mutateAsync: generateCoverLetterApi } = useGenerateCoverLetter()
+  const { data: profile } = useProfile()
+
+  const generateLetter = async () => {
     if (!company || !position) return
 
     setIsGenerating(true)
-
-    // Simulated AI generation
-    setTimeout(() => {
-      const letter = `Уважаемый HR-менеджер компании ${company}!
-
-Я с большим интересом ознакомился с вакансией "${position}" и хотел бы предложить свою кандидатуру на данную позицию.
-
-Имея более 5 лет опыта в области аналитики данных, я уверен, что мои навыки и опыт позволят мне внести значительный вклад в развитие вашей компании.
-
-Мои ключевые компетенции включают:
-• Глубокий опыт работы с Python, SQL и инструментами визуализации данных
-• Успешный опыт оптимизации бизнес-процессов на основе data-driven решений
-• Навыки работы в кросс-функциональных командах и презентации результатов руководству
-
-${keyPoints ? `\nДополнительно хочу отметить: ${keyPoints}\n` : ""}
-Буду рад возможности обсудить, как мой опыт может быть полезен для ${company}. Готов предоставить дополнительную информацию и ответить на любые вопросы.
-
-С уважением,
-Сергей Баранов
-oldersik@gmail.ru | +7 (900) 123-45-67`
-
-      setGeneratedLetter(letter)
+    try {
+      const res = await generateCoverLetterApi({ company, position, keyPoints, profile })
+      setGeneratedLetter(res.text)
+    } catch (e) {
+      console.error(e)
+      setGeneratedLetter("Ошибка генерации сопроводительного письма. Проверьте соединение с сервером.")
+    } finally {
       setIsGenerating(false)
-    }, 1500)
+    }
   }
+
+
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(generatedLetter)

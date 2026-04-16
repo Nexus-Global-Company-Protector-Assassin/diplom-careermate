@@ -31,9 +31,11 @@ const quickActions = [
 
 export function SearchCommand() {
   const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
+    setMounted(true)
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
@@ -63,30 +65,32 @@ export function SearchCommand() {
         </kbd>
       </button>
 
-      <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Поиск по приложению..." />
-        <CommandList>
-          <CommandEmpty>Ничего не найдено.</CommandEmpty>
-          <CommandGroup heading="Страницы">
-            {pages.map((page) => (
-              <CommandItem key={page.href} onSelect={() => handleSelect(page.href)}>
-                <page.icon className="mr-2 h-4 w-4" />
-                <span>{page.name}</span>
-                <span className="ml-auto text-xs text-muted-foreground">{page.description}</span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading="Быстрые действия">
-            {quickActions.map((action) => (
-              <CommandItem key={action.action} onSelect={() => handleSelect(`/${action.action}`)}>
-                <action.icon className="mr-2 h-4 w-4" />
-                <span>{action.name}</span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
+      {mounted && (
+        <CommandDialog open={open} onOpenChange={setOpen}>
+          <CommandInput placeholder="Поиск по приложению..." />
+          <CommandList>
+            <CommandEmpty>Ничего не найдено.</CommandEmpty>
+            <CommandGroup heading="Страницы">
+              {pages.map((page) => (
+                <CommandItem key={page.href} onSelect={() => handleSelect(page.href)}>
+                  <page.icon className="mr-2 h-4 w-4" />
+                  <span>{page.name}</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{page.description}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup heading="Быстрые действия">
+              {quickActions.map((action) => (
+                <CommandItem key={action.action} onSelect={() => handleSelect(`/${action.action}`)}>
+                  <action.icon className="mr-2 h-4 w-4" />
+                  <span>{action.name}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </CommandDialog>
+      )}
     </>
   )
 }

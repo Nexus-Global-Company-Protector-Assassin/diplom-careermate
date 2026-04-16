@@ -23,6 +23,7 @@ import { Achievements } from "@/widgets/dashboard/achievements"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { Input } from "@/shared/ui/input"
 import { Label } from "@/shared/ui/label"
+import { useWeeklyAnalytics } from "./api/use-analytics"
 
 const quickActions = [
   { icon: FileText, label: "Создать резюме", color: "bg-blue-500/10 text-blue-600", href: "/resume" },
@@ -39,6 +40,8 @@ interface CareerGoal {
 }
 
 export function DashboardContent() {
+  const { data: analyticsStats } = useWeeklyAnalytics()
+
   const [careerGoal, setCareerGoal] = useState<CareerGoal>({
     position: "Senior Data Analyst",
     location: "Владивосток / Удалённо",
@@ -193,12 +196,12 @@ export function DashboardContent() {
         <CardContent className="p-4 sm:p-6">
           <h2 className="text-lg font-semibold mb-4 sm:mb-6 text-card-foreground">Отчёт за неделю</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
-            {[
+            {(analyticsStats || [
               { icon: "📋", value: "5", label: "Новые вакансии" },
               { icon: "🗓️", value: "2", label: "Интервью назначено" },
               { icon: "📧", value: "8", label: "Откликов отправлено" },
               { icon: "🤖", value: "1", label: "Рекомендации ИИ" },
-            ].map((stat, i) => (
+            ]).map((stat: any, i: number) => (
               <div key={i} className="text-center">
                 <div className="text-2xl sm:text-3xl mb-2">{stat.icon}</div>
                 <p className="text-xl sm:text-2xl font-bold text-card-foreground">{stat.value}</p>

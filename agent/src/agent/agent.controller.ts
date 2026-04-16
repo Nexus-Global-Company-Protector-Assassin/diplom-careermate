@@ -72,7 +72,7 @@ export class AgentController {
     @Post('upload-resume')
     @UseInterceptors(FileInterceptor('file'))
     async uploadResume(
-        @UploadedFile() file: Express.Multer.File,
+        @UploadedFile() file: any,
     ): Promise<{ success: boolean; data: ProfileData }> {
         if (!file) {
             throw new BadRequestException('File is missing');
