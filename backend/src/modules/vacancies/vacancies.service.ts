@@ -4,19 +4,10 @@ import { PrismaService } from '../../database/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 
-// From HH API docs: currency codes used in salary field
-const EXCHANGE_RATES: Record<string, number> = {
-    USD: 93.5,
-    EUR: 100.2,
-    KZT: 0.21,
-    BYR: 28.5,
-    UZS: 0.0073,
-};
+// Adzuna API base URL
+const ADZUNA_API = 'https://api.adzuna.com/v1/api/jobs';
 
-// HH API base URL (public, no auth needed for search)
-const HH_API = 'https://api.hh.ru';
-
-// Realistic mock vacancies for when HH API is blocked (DDoS Guard / no token)
+// Realistic mock vacancies for when Adzuna API is unavailable or not configured
 function getMockVacancies(query: string, count: number) {
     const templates = [
         {
@@ -98,6 +89,18 @@ function getMockVacancies(query: string, count: number) {
     return templates.slice(0, Math.min(count, templates.length));
 }
 
+/** Maps Adzuna contract_type/contract_time to a human-readable schedule label */
+function mapSchedule(contractType?: string, contractTime?: string): string | null {
+    const type = (contractType || '').toLowerCase();
+    const time = (contractTime || '').toLowerCase();
+
+    if (type === 'permanent') return 'Полная занятость';
+    if (type === 'contract') return 'Контракт';
+    if (type === 'part_time' || time === 'part_time') return 'Частичная занятость';
+    if (time === 'full_time') return 'Полный день';
+    return null;
+}
+
 @Injectable()
 export class VacanciesService {
     private readonly logger = new Logger(VacanciesService.name);
@@ -106,7 +109,7 @@ export class VacanciesService {
         private readonly httpService: HttpService,
         private readonly prisma: PrismaService,
         private readonly configService: ConfigService,
-    ) {}
+    ) { }
 
     /**
      * Получить список вакансий из БД
@@ -124,164 +127,132 @@ export class VacanciesService {
     }
 
     /**
-     * Парсит вакансии с HH.ru по HH API и сохраняет в БД.
-     * Если HH API недоступен (403 от DDoS Guard или нет токена),
-     * использует mock-данные для демонстрации функционала.
+     * Ищет вакансии через Adzuna API и сохраняет в БД.
+     * Если ADZUNA_APP_ID/APP_KEY не заданы или API недоступен —
+     * автоматически использует mock-данные для демонстрации функционала.
      *
-     * Для полного доступа без ограничений — зарегистрируйте приложение
-     * на https://dev.hh.ru и добавьте HH_ACCESS_TOKEN в .env
+     * Для подключения реального API: зарегистрируйтесь на https://developer.adzuna.com
+     * и добавьте ADZUNA_APP_ID / ADZUNA_APP_KEY в .env
      */
     async searchAndSave(query: string, count = 10) {
-        this.logger.log(`[HH.ru API] Searching: "${query}", count: ${count}`);
+        this.logger.log(`[Adzuna API] Searching: "${query}", count: ${count}`);
 
-        const hhToken = this.configService.get<string>('HH_ACCESS_TOKEN');
-        const headers: Record<string, string> = {
-            'User-Agent': 'CareerMate/1.0 (hello@careermate.ai)',
-            'Accept': 'application/json',
-            'Accept-Language': 'ru-RU,ru;q=0.9',
-        };
+        const appId = this.configService.get<string>('ADZUNA_APP_ID');
+        const appKey = this.configService.get<string>('ADZUNA_APP_KEY');
+        const country = this.configService.get<string>('ADZUNA_COUNTRY') || 'gb';
 
-        if (hhToken) {
-            headers['Authorization'] = `Bearer ${hhToken}`;
-            this.logger.log(`[HH.ru API] Using access token`);
+        // Fast-path mock: no credentials configured
+        if (!appId || !appKey) {
+            this.logger.warn('[Adzuna API] No credentials (ADZUNA_APP_ID / ADZUNA_APP_KEY). Using mock data.');
+            return this.saveMock(query, count);
         }
 
-        // Step 1: Try to search via HH API
-        let items: any[] = [];
-        let useMock = false;
+        let results: any[] = [];
 
         try {
-            const searchRes = await firstValueFrom(
-                this.httpService.get(`${HH_API}/vacancies`, {
-                    headers,
+            const res = await firstValueFrom(
+                this.httpService.get(`${ADZUNA_API}/${country}/search/1`, {
                     params: {
-                        text: query,
-                        per_page: Math.min(count, 20),
-                        area: 113,           // Russia
-                        search_field: 'name', // search in vacancy name
-                        order_by: 'relevance',
+                        app_id: appId,
+                        app_key: appKey,
+                        what: query,
+                        results_per_page: Math.min(count, 50),
+                        'content-type': 'application/json',
                     },
                     timeout: 15000,
                 })
             );
-            items = searchRes.data?.items || [];
-            this.logger.log(`[HH.ru API] Found ${items.length} vacancies`);
+            results = res.data?.results || [];
+            this.logger.log(`[Adzuna API] Found ${results.length} vacancies`);
         } catch (err: any) {
             const status = err.response?.status;
-            if (status === 403) {
-                this.logger.warn(`[HH.ru API] 403 Forbidden — DDoS Guard is blocking server IP. Using mock data. To fix: add HH_ACCESS_TOKEN to .env (see https://dev.hh.ru)`);
-                useMock = true;
-            } else {
-                this.logger.error(`[HH.ru API] Search failed: ${err.message}`);
-                throw new Error(`HH API недоступен: ${err.message}`);
-            }
+            this.logger.warn(`[Adzuna API] Request failed (status ${status ?? 'unknown'}): ${err.message}. Falling back to mock data.`);
+            return this.saveMock(query, count);
         }
 
-        // Use mock data if HH API is blocked
-        if (useMock) {
-            const mockItems = getMockVacancies(query, count);
-            const saved: any[] = [];
-
-            for (const mock of mockItems) {
-                try {
-                    const upserted = await this.prisma.vacancy.upsert({
-                        where: { hhId: mock.hhId },
-                        create: mock,
-                        update: {
-                            title: mock.title,
-                            salaryLabel: mock.salaryLabel,
-                            skills: mock.skills,
-                            experience: mock.experience,
-                            schedule: mock.schedule,
-                            searchQuery: query,
-                            updatedAt: new Date(),
-                        },
-                    });
-                    saved.push(upserted);
-                } catch (e: any) {
-                    this.logger.warn(`[Mock] Upsert failed for ${mock.hhId}: ${e.message}`);
-                }
-            }
-
-            this.logger.log(`[Mock] Saved ${saved.length} mock vacancies to DB`);
-            return saved;
-        }
-
-        // Step 2: Process real HH data
+        // Map Adzuna response → Prisma Vacancy
         const saved: any[] = [];
 
-        for (const item of items) {
+        for (const item of results) {
             try {
-                const detRes = await firstValueFrom(
-                    this.httpService.get(`${HH_API}/vacancies/${item.id}`, {
-                        headers,
-                        timeout: 10000,
-                    })
-                );
-                const d = detRes.data;
+                const salaryFrom: number | null = item.salary_min ? Math.round(item.salary_min) : null;
+                const salaryTo: number | null = item.salary_max ? Math.round(item.salary_max) : null;
 
-                let salaryFrom: number | null = null;
-                let salaryTo: number | null = null;
                 let salaryLabel = 'Зарплата не указана';
-
-                if (d.salary) {
-                    const rate = EXCHANGE_RATES[d.salary.currency] ?? 1;
-                    salaryFrom = d.salary.from ? Math.round(d.salary.from * rate) : null;
-                    salaryTo = d.salary.to ? Math.round(d.salary.to * rate) : null;
-
-                    if (salaryFrom && salaryTo) {
-                        salaryLabel = `от ${salaryFrom.toLocaleString('ru')} до ${salaryTo.toLocaleString('ru')} ₽`;
-                    } else if (salaryFrom) {
-                        salaryLabel = `от ${salaryFrom.toLocaleString('ru')} ₽`;
-                    } else if (salaryTo) {
-                        salaryLabel = `до ${salaryTo.toLocaleString('ru')} ₽`;
-                    }
-
-                    if (d.salary.gross) {
-                        salaryLabel += ' до вычета';
-                    }
+                if (salaryFrom && salaryTo) {
+                    salaryLabel = `от ${salaryFrom.toLocaleString('ru')} до ${salaryTo.toLocaleString('ru')} £`;
+                } else if (salaryFrom) {
+                    salaryLabel = `от ${salaryFrom.toLocaleString('ru')} £`;
+                } else if (salaryTo) {
+                    salaryLabel = `до ${salaryTo.toLocaleString('ru')} £`;
                 }
 
-                const skills: string[] = (d.key_skills || []).map((k: any) => k.name);
-                const descriptionPreview = this.cleanHtml(d.description || '').slice(0, 200) + '...';
-                const experience = d.experience?.name ?? null;
-                const schedule = d.schedule?.name ?? null;
+                const descriptionRaw = item.description || '';
+                const descriptionPreview = this.cleanHtml(descriptionRaw).slice(0, 200) + (descriptionRaw.length > 200 ? '...' : '');
 
                 const upserted = await this.prisma.vacancy.upsert({
                     where: { hhId: String(item.id) },
                     create: {
                         hhId: String(item.id),
-                        title: d.name,
-                        employer: item.employer?.name ?? 'Неизвестно',
-                        location: item.area?.name ?? null,
+                        title: item.title ?? query,
+                        employer: item.company?.display_name ?? 'Unknown',
+                        location: item.location?.display_name ?? null,
                         salaryLabel,
                         salaryFrom,
                         salaryTo,
-                        salaryCurrency: d.salary?.currency ?? 'RUR',
-                        skills,
+                        salaryCurrency: 'GBP',
+                        skills: [],
                         descriptionPreview,
-                        experience,
-                        schedule,
+                        experience: null,
+                        schedule: mapSchedule(item.contract_type, item.contract_time),
                         searchQuery: query,
                     },
                     update: {
-                        title: d.name,
+                        title: item.title ?? query,
                         salaryLabel,
-                        skills,
-                        experience,
-                        schedule,
+                        schedule: mapSchedule(item.contract_type, item.contract_time),
                         searchQuery: query,
                         updatedAt: new Date(),
                     },
                 });
 
                 saved.push(upserted);
-            } catch (detailErr: any) {
-                this.logger.warn(`[HH.ru API] Failed to get details for vacancy ${item.id}: ${detailErr.message}`);
+            } catch (e: any) {
+                this.logger.warn(`[Adzuna API] Upsert failed for vacancy ${item.id}: ${e.message}`);
             }
         }
 
-        this.logger.log(`[HH.ru API] Saved ${saved.length} vacancies to DB`);
+        this.logger.log(`[Adzuna API] Saved ${saved.length} vacancies to DB`);
+        return saved;
+    }
+
+    /** Save mock vacancies to DB and return them */
+    private async saveMock(query: string, count: number) {
+        const mockItems = getMockVacancies(query, count);
+        const saved: any[] = [];
+
+        for (const mock of mockItems) {
+            try {
+                const upserted = await this.prisma.vacancy.upsert({
+                    where: { hhId: mock.hhId },
+                    create: mock,
+                    update: {
+                        title: mock.title,
+                        salaryLabel: mock.salaryLabel,
+                        skills: mock.skills,
+                        experience: mock.experience,
+                        schedule: mock.schedule,
+                        searchQuery: query,
+                        updatedAt: new Date(),
+                    },
+                });
+                saved.push(upserted);
+            } catch (e: any) {
+                this.logger.warn(`[Mock] Upsert failed for ${mock.hhId}: ${e.message}`);
+            }
+        }
+
+        this.logger.log(`[Mock] Saved ${saved.length} mock vacancies to DB`);
         return saved;
     }
 
