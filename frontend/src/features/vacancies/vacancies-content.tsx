@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/shared/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select"
 import { Checkbox } from "@/shared/ui/checkbox"
-import { useRecommendedVacancies, useResponses, useApplyToVacancy, useToggleFavorite, useHhVacancies, useHhParse } from "./api/use-vacancies"
+import { useRecommendedVacancies, useResponses, useApplyToVacancy, useToggleFavorite, useAdzunaVacancies, useAdzunaParse, Vacancy } from "./api/use-vacancies"
 
 const filterTags = ["Data Analyst", "Python", "SQL", "Remote", "Настроить фильтры"]
 
@@ -50,19 +50,7 @@ interface Job {
   logo: string
 }
 
-interface HhVacancy {
-  id: string
-  hhId: string
-  title: string
-  employer: string
-  location: string | null
-  salaryLabel: string
-  skills: string[]
-  descriptionPreview: string | null
-  experience: string | null
-  schedule: string | null
-  searchQuery: string
-}
+// Vacancy type is imported from use-vacancies.ts (typed against Prisma model)
 
 
 
@@ -91,12 +79,12 @@ export function VacanciesContent() {
   const [hhQuery, setHhQuery] = useState("")
   // activeSearchQuery is what was actually sent to DB — updated on loadHhFromDb or after parse
   const [activeSearchQuery, setActiveSearchQuery] = useState("")
-  const { data: hhVacanciesData, isLoading: hhLoading, refetch: refetchHh } = useHhVacancies(activeSearchQuery)
-  const { mutateAsync: parseHhApi, isPending: hhParsing } = useHhParse()
+  const { data: hhVacanciesData, isLoading: hhLoading } = useAdzunaVacancies(activeSearchQuery)
+  const { mutateAsync: parseHhApi, isPending: hhParsing } = useAdzunaParse()
 
   const [hhError, setHhError] = useState<string | null>(null)
 
-  const hhVacancies = hhVacanciesData || []
+  const hhVacancies: Vacancy[] = hhVacanciesData || []
 
   // Filter states
   const [salaryFrom, setSalaryFrom] = useState("")
@@ -104,25 +92,29 @@ export function VacanciesContent() {
   const [experience, setExperience] = useState("")
   const [remote, setRemote] = useState(false)
 
-  const loadHhFromDb = async () => {
+  // «Из БД» — просто меняем activeSearchQuery;
+  // useAdzunaVacancies реагирует автоматически (enabled: !!query)
+  const loadHhFromDb = () => {
     setHhError(null)
-    setActiveSearchQuery(hhQuery)
-    try {
-      await refetchHh()
-    } catch (e: any) {
-      setHhError(e.message)
+    if (!hhQuery.trim()) {
+      setHhError("Введите ключевое слово для поиска")
+      return
     }
+    setActiveSearchQuery(hhQuery.trim())
   }
 
+  // «Найти» — запрашиваем Adzuna API → сохраняем в БД→
+  // onSuccess в useAdzunaParse инвалидирует кэш → затем
+  // setActiveSearchQuery вызывает автоматический refetch из БД
   const parseHhAndSave = async () => {
     const query = hhQuery.trim() || "Разработчик"
     setHhError(null)
     try {
       await parseHhApi({ query, count: 10 })
-      // Update activeSearchQuery so useHhVacancies re-fetches with the right query
+      // onSuccess хука уже инвалидировал кэш; теперь обновляем query key
       setActiveSearchQuery(query)
     } catch (e: any) {
-      setHhError(e.message)
+      setHhError(e.message || "Ошибка при поиске вакансий")
     }
   }
 
@@ -176,10 +168,10 @@ export function VacanciesContent() {
       <Card className="bg-card border-border shadow-md border-blue-500/20">
         <CardContent className="pt-5 pb-5">
           <div className="flex items-center gap-2 mb-4">
-            <div className="h-7 w-7 rounded-lg bg-red-500/15 flex items-center justify-center">
-              <Database className="h-4 w-4 text-red-500" />
+            <div className="h-7 w-7 rounded-lg bg-blue-500/15 flex items-center justify-center">
+              <Database className="h-4 w-4 text-blue-500" />
             </div>
-            <h2 className="font-semibold text-foreground">Парсинг вакансий с HH.ru</h2>
+            <h2 className="font-semibold text-foreground">Поиск вакансий через Adzuna</h2>
             <Badge variant="secondary" className="text-xs">Сохраняется в БД</Badge>
           </div>
           <div className="flex gap-2">
@@ -210,7 +202,7 @@ export function VacanciesContent() {
               className="bg-red-600 hover:bg-red-700 text-white"
             >
               {hhParsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-              <span className="ml-1.5">{hhParsing ? "Парсим…" : "Спарсить"}</span>
+              <span className="ml-1.5">{hhParsing ? "Ищем…" : "Найти"}</span>
             </Button>
           </div>
           {hhError && (
@@ -221,7 +213,7 @@ export function VacanciesContent() {
           {(hhLoading || hhParsing) && (
             <div className="flex items-center gap-2 mt-4 text-muted-foreground text-sm">
               <Loader2 className="h-4 w-4 animate-spin" />
-              {hhParsing ? "Парсим HH.ru и сохраняем в базу данных…" : "Загружаем из БД…"}
+              {hhParsing ? "Ищем вакансии через Adzuna и сохраняем в базу данных…" : "Загружаем из БД…"}
             </div>
           )}
 
@@ -256,14 +248,9 @@ export function VacanciesContent() {
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-sm font-semibold text-green-600 dark:text-green-400">{vac.salaryLabel}</p>
-                      <a
-                        href={`https://hh.ru/vacancy/${vac.hhId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <ExternalLink className="h-3 w-3" /> hh.ru
-                      </a>
+                      <span className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+                        <ExternalLink className="h-3 w-3" /> Adzuna
+                      </span>
                     </div>
                   </div>
                 </div>

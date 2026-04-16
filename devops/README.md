@@ -222,7 +222,7 @@ kubectl rollout status deployment/backend -n careermate
 
 Настройте в GitHub Settings → Secrets:
 
-\`\`\`
+```
 # Vercel
 VERCEL_TOKEN
 VERCEL_ORG_ID
@@ -236,6 +236,11 @@ FLY_API_TOKEN
 # Database
 DATABASE_URL
 
+# Adzuna Job Search API
+ADZUNA_APP_ID
+ADZUNA_APP_KEY
+ADZUNA_COUNTRY        # например: gb, us, ru
+
 # API Keys
 NEXT_PUBLIC_API_URL
 NEXT_PUBLIC_POSTHOG_KEY
@@ -247,7 +252,7 @@ PRODUCTION_API_URL
 
 # Notifications (опционально)
 SLACK_WEBHOOK
-\`\`\`
+```
 
 ---
 
