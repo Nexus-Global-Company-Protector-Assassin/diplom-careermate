@@ -1,0 +1,52 @@
+name: Database Migration
+
+on:
+  push:
+    branches: [backend]
+    paths:
+      - 'backend/prisma/migrations/**'
+      - 'backend/prisma/schema.prisma'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  migrate:
+    name: Run Prisma Migrations
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: ./backend
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+        working-directory: ./backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Run Prisma Migrations
+        run: npx prisma migrate deploy
+        working-directory: ./backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Notify success
+        if: success()
+        run: echo "✅ Migrations applied successfully"
+
+      - name: Notify failure
+        if: failure()
+        run: echo "❌ Migration failed — check DATABASE_URL secret and migration files"
