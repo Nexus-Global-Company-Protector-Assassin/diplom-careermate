@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
 
 jobs:
   migrate:
@@ -24,11 +24,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
 
       - name: Install backend dependencies
-        run: npm ci
+        run: npm install
         working-directory: ./backend
 
       - name: Generate Prisma Client
