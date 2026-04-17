@@ -83,6 +83,7 @@ export const useAdzunaParse = () => {
       queryClient.invalidateQueries({ queryKey: vacancyKeys.search(variables.query) });
       queryClient.invalidateQueries({ queryKey: vacancyKeys.search("") });
     },
+    enabled: query.length > 0,
   });
 };
 

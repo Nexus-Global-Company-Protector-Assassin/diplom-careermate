@@ -22,8 +22,8 @@ export class ResumesController {
 
     @Post()
     @ApiOperation({ summary: 'Save an uploaded or generated resume to the database' })
-    async saveResume(@Body() body: { title: string, subtitle?: string, content?: string, type?: string }) {
-        return await this.resumesService.saveResume(body.title, body.subtitle, body.content, body.type);
+    async saveResume(@Body() body: { title: string, subtitle?: string, content?: string, type?: string, reviewData?: any }) {
+        return await this.resumesService.saveResume(body.title, body.subtitle, body.content, body.type, body.reviewData);
     }
 
     @Delete(':id')

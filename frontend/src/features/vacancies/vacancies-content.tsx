@@ -21,20 +21,18 @@ import {
   Loader2,
   ExternalLink,
   Database,
+  FileText,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { Label } from "@/shared/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select"
 import { Checkbox } from "@/shared/ui/checkbox"
-import { useRecommendedVacancies, useResponses, useApplyToVacancy, useToggleFavorite, useAdzunaVacancies, useAdzunaParse, Vacancy } from "./api/use-vacancies"
+import { useRecommendedVacancies, useApplyToVacancy, useToggleFavorite, useAdzunaVacancies, useAdzunaParse, Vacancy } from "./api/use-vacancies"
+import { useResumesHistory } from "@/features/resume/api/use-resumes"
 
 const filterTags = ["Data Analyst", "Python", "SQL", "Remote", "Настроить фильтры"]
 
-const stats = [
-  { value: "156", label: "Найдено вакансий", change: "+12 за последние 24 часа", positive: true },
-  { value: "23", label: "Ваши отклики", change: "6 приглашений работодателями", positive: true },
-  { value: "81%", label: "Среднее совпадение", change: "Отличный результат!", positive: true },
-]
+
 
 interface Job {
   id: string
@@ -48,6 +46,7 @@ interface Job {
   match: string
   matchColor: string
   logo: string
+  url?: string | null
 }
 
 // Vacancy type is imported from use-vacancies.ts (typed against Prisma model)
@@ -56,7 +55,6 @@ interface Job {
 
 export function VacanciesContent() {
   const { data: recommendedJobs, isLoading: isJobsLoading } = useRecommendedVacancies()
-  const { data: responsesData, isLoading: isResponsesLoading } = useResponses()
   const { mutate: applyToJob } = useApplyToVacancy()
   const { mutate: toggleFavApi } = useToggleFavorite()
 
@@ -67,6 +65,11 @@ export function VacanciesContent() {
   const [applyModalOpen, setApplyModalOpen] = useState(false)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [appliedJobs, setAppliedJobs] = useState<string[]>([])
+  const [selectedResumeId, setSelectedResumeId] = useState<string>("")
+
+  // Resume list for selector
+  const { data: resumesHistoryData } = useResumesHistory()
+  const savedResumes = resumesHistoryData?.resumes || []
 
   // Load backend data into state
   useEffect(() => {
@@ -259,6 +262,7 @@ export function VacanciesContent() {
           )}
         </CardContent>
       </Card>
+
       <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -298,7 +302,28 @@ export function VacanciesContent() {
 
       {/* Stats */}
       <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
-        {stats.map((stat, i) => (
+        {[
+          {
+            value: String(jobs.length),
+            label: "Найдено вакансий",
+            change: jobs.length > 0 ? `Из базы Adzuna` : "Нет данных",
+            positive: jobs.length > 0,
+          },
+          {
+            value: String(appliedJobs.length),
+            label: "Ваши отклики",
+            change: appliedJobs.length > 0 ? `${appliedJobs.length} отправлено` : "Вы пока не откликались",
+            positive: appliedJobs.length > 0,
+          },
+          {
+            value: jobs.length > 0
+              ? `${Math.round(jobs.reduce((acc, j) => acc + parseInt(j.match), 0) / jobs.length)}%`
+              : "—",
+            label: "Среднее совпадение",
+            change: jobs.length > 0 ? "На основе ваших навыков" : "Нет данных",
+            positive: jobs.length > 0,
+          },
+        ].map((stat, i) => (
           <Card key={i} className="bg-card border-border">
             <CardContent className="p-4">
               <p className="text-xl sm:text-2xl font-bold text-card-foreground">{stat.value}</p>
@@ -338,7 +363,23 @@ export function VacanciesContent() {
 
       {/* Recommended Jobs */}
       <div>
-        <h2 className="text-lg font-semibold mb-4 text-foreground">Рекомендованные вакансии</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-lg font-semibold text-foreground">Рекомендованные вакансии</h2>
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
+              <SelectTrigger className="bg-card border-border w-[260px]">
+                <SelectValue placeholder="Выберите резюме для подбора" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все резюме</SelectItem>
+                {savedResumes.map((r: any) => (
+                  <SelectItem key={r.id} value={r.id}>{r.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="space-y-4">
           {filteredJobs.map((job) => (
             <Card key={job.id} className="bg-card border-border">
@@ -372,6 +413,16 @@ export function VacanciesContent() {
                         ))}
                       </div>
                       <p className="font-semibold mt-2 text-card-foreground">{job.salary}</p>
+                      {job.url && (
+                        <a
+                          href={job.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 transition-colors mt-1"
+                        >
+                          <ExternalLink className="h-3 w-3" /> Открыть на Adzuna
+                        </a>
+                      )}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -409,39 +460,41 @@ export function VacanciesContent() {
         </div>
       </div>
 
-      {/* Jobs Table */}
+      {/* Jobs Table — Applied Jobs */}
+      {appliedJobs.length > 0 && (
       <Card className="bg-card border-border">
         <CardContent className="p-0 overflow-x-auto">
-          {isResponsesLoading ? (
-            <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Загрузка откликов...</div>
-          ) : (
             <table className="w-full min-w-[500px]">
               <thead>
                 <tr className="border-b border-border text-left text-sm text-muted-foreground">
                   <th className="p-4 font-medium">Вакансия</th>
                   <th className="p-4 font-medium">Компания</th>
-                  <th className="p-4 font-medium">Дата</th>
+                  <th className="p-4 font-medium">Совпадение</th>
                   <th className="p-4 font-medium">Статус</th>
                   <th className="p-4 font-medium">Ответ</th>
                 </tr>
               </thead>
               <tbody>
-                {(responsesData || []).map((row: any) => (
-                  <tr key={row.id} className="border-b border-border last:border-0">
-                    <td className="p-4 text-card-foreground">{row.title}</td>
-                    <td className="p-4 text-card-foreground">{row.company}</td>
-                    <td className="p-4 text-card-foreground">{row.date}</td>
-                    <td className="p-4">
-                      <Badge className={`${row.statusColor} text-white`}>{row.status}</Badge>
-                    </td>
-                    <td className="p-4 text-muted-foreground">—</td>
-                  </tr>
-                ))}
+                {appliedJobs.map((jobId) => {
+                  const job = jobs.find((j) => j.id === jobId)
+                  if (!job) return null
+                  return (
+                    <tr key={jobId} className="border-b border-border last:border-0">
+                      <td className="p-4 text-card-foreground">{job.title}</td>
+                      <td className="p-4 text-card-foreground">{job.company}</td>
+                      <td className="p-4"><Badge className={job.matchColor}>{job.match}</Badge></td>
+                      <td className="p-4">
+                        <Badge className="bg-blue-500 text-white">Отправлено</Badge>
+                      </td>
+                      <td className="p-4 text-muted-foreground">—</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
-          )}
         </CardContent>
       </Card>
+      )}
 
       {/* Filter Modal */}
       <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>

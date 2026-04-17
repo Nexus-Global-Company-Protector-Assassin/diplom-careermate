@@ -71,8 +71,9 @@ model Resume {
   subtitle  String?  
   content   String   // Markdown or HTML content
   status    String   @default("draft") // draft, active, archived
-  type      String   @default("resume") // resume, cover_letter
+  type      String   @default("resume") // resume, cover_letter, ai_improved
   version   Int      @default(1)
+  reviewData Json?   // Full AI review result (score, strengths, weaknesses, improved resume)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -119,6 +120,7 @@ model Vacancy {
   descriptionPreview String?
   experience         String?
   schedule           String?
+  url                String?  // Ссылка на оригинальную вакансию
   searchQuery        String   // Поисковый запрос, по которому найдена вакансия
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

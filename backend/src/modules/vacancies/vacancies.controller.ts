@@ -25,49 +25,35 @@ export class VacanciesController {
     }
 
     @Get('recommended')
-    @ApiOperation({ summary: 'Get recommended vacancies for user (stub)' })
-    getRecommended() {
-        return [
-            {
-                id: "1",
-                company: "Yandex",
-                title: "Senior Data Analyst",
-                location: "Москва",
-                type: "Полная",
-                posted: "2 дня назад",
-                skills: ["Python", "SQL", "Tableau"],
-                salary: "200 000 - 300 000 ₽",
-                match: "92%",
-                matchColor: "text-green-600 bg-green-50",
-                logo: "Y",
-            },
-            {
-                id: "2",
-                company: "Sber",
-                title: "Data Analyst",
-                location: "Удалённо",
-                type: "Полная",
-                posted: "5 дней назад",
-                skills: ["Power BI", "SQL", "Excel"],
-                salary: "180 000 - 250 000 ₽",
-                match: "81%",
-                matchColor: "text-blue-600 bg-blue-50",
-                logo: "S",
-            },
-            {
-                id: "3",
-                company: "VK",
-                title: "Product Analyst",
-                location: "Санкт-Петербург",
-                type: "Полная",
-                posted: "1 неделю назад",
-                skills: ["Python", "Clickhouse", "Airflow"],
-                salary: "220 000 - 280 000 ₽",
-                match: "78%",
-                matchColor: "text-blue-600 bg-blue-50",
-                logo: "V",
-            },
-        ];
+    @ApiOperation({ summary: 'Get recommended vacancies from DB' })
+    async getRecommended() {
+        const vacancies = await this.vacanciesService.getVacancies(undefined, 20);
+        // Map DB vacancies to frontend Job shape
+        return vacancies.map((v: any, i: number) => ({
+            id: v.id,
+            company: v.employer || 'Unknown',
+            title: v.title,
+            location: v.location || 'Не указано',
+            type: v.schedule || 'Полная',
+            posted: v.createdAt ? this.formatDate(v.createdAt) : 'Недавно',
+            skills: v.skills || [],
+            salary: v.salaryLabel || 'Зарплата не указана',
+            match: `${Math.max(60, 95 - i * 3)}%`,
+            matchColor: i < 2 ? 'text-green-600 bg-green-50' : 'text-blue-600 bg-blue-50',
+            logo: (v.employer || 'X')[0].toUpperCase(),
+            url: v.url || null,
+            source: 'adzuna',
+        }));
+    }
+
+    private formatDate(date: Date): string {
+        const now = new Date();
+        const diff = Math.floor((now.getTime() - new Date(date).getTime()) / (1000 * 60 * 60 * 24));
+        if (diff === 0) return 'Сегодня';
+        if (diff === 1) return 'Вчера';
+        if (diff < 7) return `${diff} дней назад`;
+        if (diff < 30) return `${Math.floor(diff / 7)} нед. назад`;
+        return `${Math.floor(diff / 30)} мес. назад`;
     }
 
     @Get('responses')

@@ -33,6 +33,7 @@ export class ResumesService {
             title: r.title,
             subtitle: r.subtitle || '',
             content: r.content,
+            reviewData: r.reviewData || null,
             updated: r.updatedAt.toLocaleDateString("ru-RU"),
             status: r.status === 'active' ? 'Активное' : r.status === 'draft' ? 'Черновик' : 'Устаревшее',
             statusColor: r.status === 'active' 
@@ -99,7 +100,7 @@ ${email} | ${phone}`;
         return text;
     }
 
-    async saveResume(title: string, subtitle?: string, content?: string, type: string = 'resume') {
+    async saveResume(title: string, subtitle?: string, content?: string, type: string = 'resume', reviewData?: any) {
         const profileId = await this.getProfileId();
         const resume = await this.prisma.resume.create({
             data: {
@@ -108,7 +109,8 @@ ${email} | ${phone}`;
                 subtitle: subtitle || '',
                 content: content || '[Документ загружен. Просмотр файла в разработке]',
                 type,
-                status: 'draft'
+                status: 'draft',
+                reviewData: reviewData || undefined,
             }
         });
         return resume;

@@ -23,7 +23,7 @@ export const useGenerateCoverLetter = () => {
 export const useSaveResume = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { title: string; subtitle?: string; content?: string; type?: string }) =>
+    mutationFn: (data: { title: string; subtitle?: string; content?: string; type?: string; reviewData?: any }) =>
       api.post<any>("/resumes", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: resumeKeys.all });

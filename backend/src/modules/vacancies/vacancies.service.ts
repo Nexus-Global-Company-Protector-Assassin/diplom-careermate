@@ -159,7 +159,7 @@ export class VacanciesService {
                         results_per_page: Math.min(count, 50),
                         'content-type': 'application/json',
                     },
-                    timeout: 15000,
+                    timeout: 5000,
                 })
             );
             results = res.data?.results || [];
@@ -205,12 +205,14 @@ export class VacanciesService {
                         descriptionPreview,
                         experience: null,
                         schedule: mapSchedule(item.contract_type, item.contract_time),
+                        url: item.redirect_url ?? null,
                         searchQuery: query,
                     },
                     update: {
                         title: item.title ?? query,
                         salaryLabel,
                         schedule: mapSchedule(item.contract_type, item.contract_time),
+                        url: item.redirect_url ?? null,
                         searchQuery: query,
                         updatedAt: new Date(),
                     },
