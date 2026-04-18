@@ -28,7 +28,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install backend dependencies
-        run: npm ci --workspace=backend
+        run: npm ci --workspace=backend --ignore-scripts
         env:
           PUPPETEER_SKIP_DOWNLOAD: "true"
           CI: "true"
@@ -47,8 +47,10 @@ jobs:
 
       - name: Notify success
         if: success()
-        run: echo "✅ Migrations applied successfully"
+        run: echo "✅ Migrations applied successfully to production database"
 
       - name: Notify failure
         if: failure()
-        run: echo "❌ Migration failed — check DATABASE_URL secret and migration files"
+        run: |
+          echo "❌ Migration failed!"
+          echo "Make sure DATABASE_URL secret points to a remote (cloud) PostgreSQL, not localhost."
