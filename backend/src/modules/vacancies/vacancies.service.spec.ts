@@ -121,7 +121,7 @@ describe('VacanciesService', () => {
         it('should filter by searchQuery when query is provided', async () => {
             prisma.vacancy.findMany.mockResolvedValue([mockVacancy]);
 
-            await service.getVacancies('Frontend', 10);
+            await service.getVacancies({ query: 'Frontend', limit: 10 });
 
             expect(prisma.vacancy.findMany).toHaveBeenCalledWith({
                 where: { searchQuery: { contains: 'Frontend', mode: 'insensitive' } },
@@ -133,7 +133,7 @@ describe('VacanciesService', () => {
         it('should respect custom limit', async () => {
             prisma.vacancy.findMany.mockResolvedValue([]);
 
-            await service.getVacancies(undefined, 5);
+            await service.getVacancies({ limit: 5 });
 
             expect(prisma.vacancy.findMany).toHaveBeenCalledWith(
                 expect.objectContaining({ take: 5 }),
@@ -142,7 +142,7 @@ describe('VacanciesService', () => {
 
         it('should return empty array when DB has no vacancies', async () => {
             prisma.vacancy.findMany.mockResolvedValue([]);
-            const result = await service.getVacancies('nonexistent');
+            const result = await service.getVacancies({ query: 'nonexistent' });
             expect(result).toEqual([]);
         });
     });

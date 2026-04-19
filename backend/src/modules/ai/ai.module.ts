@@ -8,5 +8,6 @@ import { DatabaseModule } from '../../database/database.module';
     imports: [HttpModule, DatabaseModule],
     controllers: [AiController],
     providers: [AiService],
+    exports: [AiService],
 })
-export class AiModule {}
+export class AiModule { }
