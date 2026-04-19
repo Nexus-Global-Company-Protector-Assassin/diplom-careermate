@@ -891,6 +891,37 @@ export function VacanciesContent() {
                     <h4 className="font-semibold text-foreground flex items-center mb-2"><Check className="h-4 w-4 mr-2 text-purple-500" />План собеседования</h4>
                     <p className="text-sm text-muted-foreground whitespace-pre-wrap">{analysisResult.F_Interview}</p>
                   </div>
+
+                  {analysisResult.G_Legitimacy && (
+                    <div className="border border-red-200 dark:border-red-900/50 rounded-lg p-4 bg-red-50/50 dark:bg-red-900/10 mb-4">
+                      <h4 className="font-semibold text-foreground flex items-center mb-2">
+                        <span className="mr-2">🕵️</span> Оценка реальности (Ghost Job Detection)
+                      </h4>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={`
+                            ${analysisResult.G_Legitimacy.verdict?.includes('High') ? "bg-green-100 text-green-800 border-green-200" :
+                              analysisResult.G_Legitimacy.verdict?.includes('Caution') ? "bg-orange-100 text-orange-800 border-orange-200" :
+                              "bg-red-100 text-red-800 border-red-200"
+                            }
+                          `}>
+                            {analysisResult.G_Legitimacy.verdict}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{analysisResult.G_Legitimacy.explanation}</p>
+                        {analysisResult.G_Legitimacy.signals && analysisResult.G_Legitimacy.signals.length > 0 && (
+                          <div className="mt-2">
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Ключевые сигналы:</span>
+                            <ul className="list-disc pl-5 mt-1 text-sm text-muted-foreground">
+                              {analysisResult.G_Legitimacy.signals.map((sig: string, i: number) => (
+                                <li key={i}>{sig}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
