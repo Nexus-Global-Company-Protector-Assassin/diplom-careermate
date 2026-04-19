@@ -1,10 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/shared/api/api-client";
 
-// Shape of a vacancy returned from the backend (Prisma Vacancy model)
 export interface Vacancy {
   id: string;
-  hhId: string;        // legacy field name in DB — used as the external source ID
+  hhId: string;
   title: string;
   employer: string;
   location: string | null;
@@ -19,19 +18,75 @@ export interface Vacancy {
   searchQuery: string;
   createdAt: string;
   updatedAt: string;
+  url?: string | null;
+  archetype?: string;
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  freshnessScore?: number | null;
+  freshnessLabel?: string | null;
+  daysOld?: number | null;
+}
+
+export interface RecommendedJob {
+  id: string;
+  company: string;
+  title: string;
+  location: string;
+  type: string;
+  posted: string;
+  skills: string[];
+  salary: string;
+  salaryFrom: number | null;
+  salaryTo: number | null;
+  match: string;
+  matchScore: number;
+  matchColor: string;
+  logo: string;
+  url: string | null;
+  archetype?: string;
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  freshnessScore?: number | null;
+  freshnessLabel?: string | null;
+  daysOld?: number | null;
+}
+
+export interface VacancySearchFilters {
+  query?: string;
+  salaryFrom?: number;
+  salaryTo?: number;
+  remote?: boolean;
+  experience?: string;
+  location?: string;
+  limit?: number;
 }
 
 export const vacancyKeys = {
   all: ["vacancies"] as const,
-  recommended: () => [...vacancyKeys.all, "recommended"] as const,
+  recommended: (position?: string, skills?: string) =>
+    [...vacancyKeys.all, "recommended", position, skills] as const,
   responses: () => [...vacancyKeys.all, "responses"] as const,
-  search: (query: string) => [...vacancyKeys.all, "search", query] as const,
+  search: (filters: VacancySearchFilters) =>
+    [...vacancyKeys.all, "search", filters] as const,
 };
 
-export const useRecommendedVacancies = () => {
+/** Recommended vacancies based on user profile */
+export const useRecommendedVacancies = (position?: string, skills?: string[], salary?: number) => {
+  const skillsParam = skills && skills.length > 0 ? skills.join(",") : undefined;
+  const salaryStr = salary !== undefined ? String(salary) : undefined;
   return useQuery({
-    queryKey: vacancyKeys.recommended(),
-    queryFn: () => api.get<any[]>("/vacancies/recommended"),
+    queryKey: vacancyKeys.recommended(position, skillsParam),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (position) params.set("position", position);
+      if (skillsParam) params.set("skills", skillsParam);
+      if (salaryStr) params.set("salary", salaryStr);
+      params.set("limit", "10");
+      return api.get<RecommendedJob[]>(`/vacancies/recommended?${params.toString()}`);
+    },
+    // Re-fetch when position changes (e.g. profile loaded)
+    staleTime: 5 * 60 * 1000,
+    enabled: !!position, // Do not fetch until we have the user's position!
   });
 };
 
@@ -60,15 +115,23 @@ export const useToggleFavorite = () => {
   });
 };
 
-/** Fetches vacancies stored in DB (via Adzuna or mock fallback) */
-export const useAdzunaVacancies = (query: string) => {
+/** Fetch vacancies from DB with full filter support */
+export const useAdzunaVacancies = (filters: VacancySearchFilters) => {
+  const { query, salaryFrom, salaryTo, remote, experience, location, limit = 20 } = filters;
   return useQuery({
-    queryKey: vacancyKeys.search(query),
+    queryKey: vacancyKeys.search(filters),
     queryFn: () => {
-      const qs = query ? `?query=${encodeURIComponent(query)}&limit=20` : `?limit=20`;
-      return api.get<Vacancy[]>(`/vacancies${qs}`);
+      const params = new URLSearchParams();
+      if (query) params.set("query", query);
+      if (salaryFrom !== undefined) params.set("salaryFrom", String(salaryFrom));
+      if (salaryTo !== undefined) params.set("salaryTo", String(salaryTo));
+      if (remote) params.set("remote", "true");
+      if (experience && experience !== "any") params.set("experience", experience);
+      if (location) params.set("location", location);
+      params.set("limit", String(limit));
+      return api.get<Vacancy[]>(`/vacancies?${params.toString()}`);
     },
-    enabled: !!query, // auto-fetch when query changes (reactive)
+    enabled: !!query || salaryFrom !== undefined || salaryTo !== undefined || remote || !!experience || !!location,
   });
 };
 
@@ -78,18 +141,32 @@ export const useAdzunaParse = () => {
   return useMutation({
     mutationFn: (data: { query: string; count?: number }) =>
       api.post<Vacancy[]>("/vacancies/search", data),
-    // react-query v5: onSuccess is still supported on mutationOptions
     onSuccess: (_result: Vacancy[], variables: { query: string; count?: number }) => {
-      queryClient.invalidateQueries({ queryKey: vacancyKeys.search(variables.query) });
-      queryClient.invalidateQueries({ queryKey: vacancyKeys.search("") });
+      queryClient.invalidateQueries({ queryKey: vacancyKeys.search({ query: variables.query }) });
     },
   });
 };
 
-// ---------------------------------------------------------------------------
-// Legacy aliases — keep so other files importing the old names don't break
-// ---------------------------------------------------------------------------
+export const useEvaluateVacancy = () => {
+  return useMutation({
+    mutationFn: ({ vacancyId, resumeId }: { vacancyId: string; resumeId?: string }) => {
+      const params = resumeId && resumeId !== 'all' ? `?resumeId=${resumeId}` : '';
+      return api.get<any>(`/vacancies/${vacancyId}/evaluation${params}`);
+    },
+  });
+};
+
+export const useInterviewPrep = () => {
+  return useMutation({
+    mutationFn: ({ vacancyId, resumeId }: { vacancyId: string; resumeId?: string }) => {
+      const params = resumeId && resumeId !== 'all' ? `?resumeId=${resumeId}` : '';
+      return api.get<any>(`/vacancies/${vacancyId}/interview-prep${params}`);
+    },
+  });
+};
+
+// Legacy aliases
 /** @deprecated use useAdzunaVacancies */
-export const useHhVacancies = useAdzunaVacancies;
+export const useHhVacancies = (query: string) => useAdzunaVacancies({ query });
 /** @deprecated use useAdzunaParse */
 export const useHhParse = useAdzunaParse;
