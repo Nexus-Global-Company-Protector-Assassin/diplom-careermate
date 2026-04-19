@@ -313,164 +313,7 @@ function calcMatch(
     return Math.max(0, Math.min(100, Math.round(finalScore)));
 }
 
-// ---------------------------------------------------------------------------
-// Mock data
-// ---------------------------------------------------------------------------
-function getMockVacancies(query: string, count: number) {
-    const templates = [
-        {
-            hhId: `mock-${query}-001`,
-            title: query,
-            employer: 'Yandex',
-            location: 'Москва',
-            salaryLabel: 'от 200 000 до 350 000 ₽',
-            salaryFrom: 200000,
-            salaryTo: 350000,
-            salaryCurrency: 'RUR',
-            skills: ['JavaScript', 'TypeScript', 'React', 'Next.js', 'GraphQL'],
-            descriptionPreview: `Ищем опытного ${query} для работы над высоконагруженными продуктами.`,
-            experience: 'От 3 до 6 лет',
-            schedule: 'Полный день',
-            searchQuery: query,
-        },
-        {
-            hhId: `mock-${query}-002`,
-            title: `Senior ${query}`,
-            employer: 'Сбер',
-            location: 'Удалённо',
-            salaryLabel: 'от 250 000 до 400 000 ₽',
-            salaryFrom: 250000,
-            salaryTo: 400000,
-            salaryCurrency: 'RUR',
-            skills: ['TypeScript', 'Vue.js', 'React', 'Docker', 'Kubernetes'],
-            descriptionPreview: `Приглашаем Senior ${query} в нашу команду финтех-продуктов.`,
-            experience: 'От 6 лет',
-            schedule: 'Удалённая работа',
-            searchQuery: query,
-        },
-        {
-            hhId: `mock-${query}-003`,
-            title: `Middle ${query}`,
-            employer: 'VK',
-            location: 'Санкт-Петербург',
-            salaryLabel: 'от 150 000 до 220 000 ₽',
-            salaryFrom: 150000,
-            salaryTo: 220000,
-            salaryCurrency: 'RUR',
-            skills: ['JavaScript', 'React', 'Redux', 'Node.js', 'PostgreSQL'],
-            descriptionPreview: `Ищем Middle ${query} для работы над социальной сетью VK.`,
-            experience: 'От 1 года до 3 лет',
-            schedule: 'Гибкий график',
-            searchQuery: query,
-        },
-        {
-            hhId: `mock-${query}-004`,
-            title: `${query} / Frontend Developer`,
-            employer: 'Авито',
-            location: 'Москва',
-            salaryLabel: 'от 180 000 до 300 000 ₽',
-            salaryFrom: 180000,
-            salaryTo: 300000,
-            salaryCurrency: 'RUR',
-            skills: ['React', 'TypeScript', 'CSS', 'WebPack', 'Git'],
-            descriptionPreview: `Авито ищет Frontend Developer со специализацией ${query}.`,
-            experience: 'От 3 до 6 лет',
-            schedule: 'Полный день',
-            searchQuery: query,
-        },
-        {
-            hhId: `mock-${query}-005`,
-            title: `Junior ${query}`,
-            employer: 'OZON',
-            location: 'Удалённо',
-            salaryLabel: 'от 80 000 до 130 000 ₽',
-            salaryFrom: 80000,
-            salaryTo: 130000,
-            salaryCurrency: 'RUR',
-            skills: ['JavaScript', 'React', 'HTML', 'CSS', 'Git'],
-            descriptionPreview: `OZON Tech ищет начинающего ${query}. Быстрый рост и наставник.`,
-            experience: 'Нет опыта',
-            schedule: 'Удалённая работа',
-            searchQuery: query,
-        },
-        {
-            hhId: `mock-${query}-006`,
-            title: `${query} Team Lead`,
-            employer: 'Тинькофф',
-            location: 'Москва',
-            salaryLabel: 'от 350 000 до 500 000 ₽',
-            salaryFrom: 350000,
-            salaryTo: 500000,
-            salaryCurrency: 'RUR',
-            skills: ['TypeScript', 'React', 'Node.js', 'System Design', 'Mentoring'],
-            descriptionPreview: `Тинькофф ищет Team Lead ${query} для руководства командой из 5+ человек.`,
-            experience: 'От 6 лет',
-            schedule: 'Гибкий график',
-            searchQuery: query,
-        },
-        {
-            hhId: `mock-${query}-007`,
-            title: `${query} (Fullstack)`,
-            employer: 'Ростелеком',
-            location: 'Удалённо',
-            salaryLabel: 'от 120 000 до 180 000 ₽',
-            salaryFrom: 120000,
-            salaryTo: 180000,
-            salaryCurrency: 'RUR',
-            skills: ['JavaScript', 'Node.js', 'React', 'MongoDB', 'Docker'],
-            descriptionPreview: `Fullstack-разработчик для развития платформы Ростелеком.`,
-            experience: 'От 1 года до 3 лет',
-            schedule: 'Удалённая работа',
-            searchQuery: query,
-        },
-        {
-            hhId: `mock-${query}-008`,
-            title: `${query} — Data & Analytics`,
-            employer: 'МТС',
-            location: 'Москва',
-            salaryLabel: 'от 160 000 до 240 000 ₽',
-            salaryFrom: 160000,
-            salaryTo: 240000,
-            salaryCurrency: 'RUR',
-            skills: ['Python', 'SQL', 'Pandas', 'React', 'PowerBI'],
-            descriptionPreview: `МТС ищет специалиста ${query} с опытом в аналитике данных.`,
-            experience: 'От 1 года до 3 лет',
-            schedule: 'Полный день',
-            searchQuery: query,
-        },
-        {
-            hhId: `mock-${query}-009`,
-            title: `${query} (Remote)`,
-            employer: 'Lamoda',
-            location: 'Удалённо',
-            salaryLabel: 'от 140 000 до 200 000 ₽',
-            salaryFrom: 140000,
-            salaryTo: 200000,
-            salaryCurrency: 'RUR',
-            skills: ['JavaScript', 'TypeScript', 'Vue.js', 'CSS', 'REST API'],
-            descriptionPreview: `Lamoda — международная фэшн-платформа. ${query} для нашей распределённой команды.`,
-            experience: 'От 1 года до 3 лет',
-            schedule: 'Удалённая работа',
-            searchQuery: query,
-        },
-        {
-            hhId: `mock-${query}-010`,
-            title: `${query} (Стажёр)`,
-            employer: 'Газпром Нефть',
-            location: 'Санкт-Петербург',
-            salaryLabel: 'от 50 000 до 80 000 ₽',
-            salaryFrom: 50000,
-            salaryTo: 80000,
-            salaryCurrency: 'RUR',
-            skills: ['JavaScript', 'HTML', 'CSS', 'Git', 'Figma'],
-            descriptionPreview: `Стажировка для студентов и выпускников по направлению ${query}.`,
-            experience: 'Нет опыта',
-            schedule: 'Гибкий график',
-            searchQuery: query,
-        },
-    ];
-    return templates.slice(0, Math.min(count, templates.length));
-}
+
 
 function mapSchedule(contractType?: string, contractTime?: string): string | null {
     const type = (contractType || '').toLowerCase();
@@ -639,8 +482,8 @@ export class VacanciesService {
         const country = this.configService.get<string>('ADZUNA_COUNTRY') || 'gb';
 
         if (!appId || !appKey) {
-            this.logger.warn('[Adzuna API] No credentials. Using mock data.');
-            return this.saveMock(query, count);
+            this.logger.error('[Adzuna API] No credentials configured (ADZUNA_APP_ID / ADZUNA_APP_KEY missing).');
+            throw new Error('Adzuna API credentials are not configured.');
         }
 
         let results: any[] = [];
@@ -655,15 +498,17 @@ export class VacanciesService {
                         results_per_page: Math.min(count, 50),
                         'content-type': 'application/json',
                     },
-                    timeout: 5000,
-                })
+                    timeout: 10000,
+                    // Force IPv4 — IPv6 is unreachable in this network environment
+                    family: 4,
+                } as any)
             );
             results = res.data?.results || [];
             this.logger.log(`[Adzuna API] Found ${results.length} vacancies`);
         } catch (err: any) {
             const status = err.response?.status;
-            this.logger.warn(`[Adzuna API] Failed (status ${status ?? 'unknown'}): ${err.message}. Using mock.`);
-            return this.saveMock(query, count);
+            this.logger.error(`[Adzuna API] Request failed (status ${status ?? 'unknown'}): ${err.message}`);
+            throw new Error(`Adzuna API request failed: ${err.message}`);
         }
 
         const saved: any[] = [];
@@ -723,34 +568,7 @@ export class VacanciesService {
         return saved;
     }
 
-    private async saveMock(query: string, count: number) {
-        const mockItems = getMockVacancies(query, count);
-        const saved: any[] = [];
 
-        for (const mock of mockItems) {
-            try {
-                const upserted = await this.prisma.vacancy.upsert({
-                    where: { hhId: mock.hhId },
-                    create: mock,
-                    update: {
-                        title: mock.title,
-                        salaryLabel: mock.salaryLabel,
-                        skills: mock.skills,
-                        experience: mock.experience,
-                        schedule: mock.schedule,
-                        searchQuery: query,
-                        updatedAt: new Date(),
-                    },
-                });
-                saved.push(upserted);
-            } catch (e: any) {
-                this.logger.warn(`[Mock] Upsert failed for ${mock.hhId}: ${e.message}`);
-            }
-        }
-
-        this.logger.log(`[Mock] Saved ${saved.length} mock vacancies to DB`);
-        return saved;
-    }
 
     private cleanHtml(html: string): string {
         return html
@@ -768,27 +586,6 @@ export class VacanciesService {
      * AI Deep Analysis (7-block evaluation + Ghost Job Detection) for a specific vacancy
      */
     async evaluateVacancy(id: string, resumeId?: string) {
-        if (id.startsWith('mock-')) {
-            const mockScore = 50 + Math.floor(Math.random() * 40);
-            const mockGrade = mockScore >= 80 ? 'A' : mockScore >= 65 ? 'B' : mockScore >= 50 ? 'C' : 'D';
-            return {
-                "A_Summary": "Тестовая вакансия. Подключите Adzuna / HH API для реальных данных.",
-                "B_CV_Match": "Данные сгенерированы для демонстрации.",
-                "C_Strategy": "Акцентируйте внимание на ваших ключевых достижениях.",
-                "D_Compensation": "Зарплата тестовая. Всегда просите верхнюю границу рынка!",
-                "E_Personalization": "Добавьте ключевые слова из описания вакансии в резюме.",
-                "F_Interview": "Подготовьте STAR-историю о своём главном проекте.",
-                "G_Legitimacy": {
-                    "verdict": "Proceed with Caution",
-                    "signals": ["Mock-вакансия — реальная проверка невозможна"],
-                    "explanation": "Это тестовые данные. Ghost Job Detection работает только с реальными вакансиями."
-                },
-                "archetype": "Unknown",
-                "grade": mockGrade,
-                "score": mockScore
-            };
-        }
-
         // Find the vacancy safely
         let vacancy: any = null;
         try {
@@ -848,16 +645,6 @@ export class VacanciesService {
      * Generate STAR+R interview preparation for a specific vacancy
      */
     async interviewPrep(id: string, resumeId?: string) {
-        if (id.startsWith('mock-')) {
-            return {
-                questions: [
-                    { question: "Расскажите о сложном проекте, над которым вы работали", category: "behavioral", star: { situation: "Тестовая ситуация", task: "Тестовая задача", action: "Тестовые действия", result: "Тестовый результат", reflection: "Тестовый вывод" } }
-                ],
-                candidate_questions: ["Какие технологии вы используете?", "Какая структура команды?", "Какие цели на год?"],
-                tips: "Это тестовая вакансия. Подключите Adzuna ключи для реальных данных."
-            };
-        }
-
         // Find the vacancy safely
         let vacancy: any = null;
         try {
