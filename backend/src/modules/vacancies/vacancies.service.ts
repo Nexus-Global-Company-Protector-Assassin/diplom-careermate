@@ -4,71 +4,12 @@ import { PrismaService } from '../../database/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AiService } from '../ai/ai.service';
+import { SkillsService } from '../skills/skills.service';
 
 // Adzuna API base URL
 const ADZUNA_API = 'https://api.adzuna.com/v1/api/jobs';
 
-// ---------------------------------------------------------------------------
-// Known skills dictionary for extraction from job descriptions
-// ---------------------------------------------------------------------------
-const KNOWN_SKILLS: string[] = [
-    // Programming languages
-    'python', 'javascript', 'typescript', 'java', 'c#', 'c++', 'go', 'golang',
-    'rust', 'ruby', 'php', 'swift', 'kotlin', 'scala', 'r', 'matlab', 'perl',
-    'haskell', 'elixir', 'clojure', 'dart', 'lua', 'shell', 'bash', 'powershell',
-    // Frontend
-    'react', 'angular', 'vue', 'vue.js', 'next.js', 'nextjs', 'nuxt', 'svelte',
-    'html', 'css', 'sass', 'less', 'tailwind', 'bootstrap', 'webpack', 'vite',
-    'redux', 'mobx', 'graphql', 'rest api', 'jquery',
-    // Backend
-    'node.js', 'nodejs', 'express', 'nestjs', 'django', 'flask', 'fastapi',
-    'spring', 'spring boot', '.net', 'asp.net', 'rails', 'laravel', 'gin',
-    // Data / ML / AI
-    'sql', 'nosql', 'postgresql', 'postgres', 'mysql', 'mongodb', 'redis',
-    'elasticsearch', 'cassandra', 'dynamodb', 'sqlite', 'oracle',
-    'pandas', 'numpy', 'scipy', 'scikit-learn', 'sklearn', 'tensorflow',
-    'pytorch', 'keras', 'xgboost', 'lightgbm', 'spark', 'pyspark', 'hadoop',
-    'airflow', 'dbt', 'kafka', 'rabbitmq', 'etl', 'data warehouse',
-    'machine learning', 'deep learning', 'nlp', 'computer vision',
-    'power bi', 'powerbi', 'tableau', 'looker', 'metabase', 'superset',
-    'bigquery', 'snowflake', 'redshift', 'databricks', 'datalake',
-    // DevOps / Cloud
-    'docker', 'kubernetes', 'k8s', 'aws', 'azure', 'gcp', 'google cloud',
-    'terraform', 'ansible', 'jenkins', 'ci/cd', 'github actions', 'gitlab',
-    'linux', 'nginx', 'prometheus', 'grafana', 'datadog', 'new relic',
-    // Tools & practices
-    'git', 'jira', 'confluence', 'figma', 'sketch', 'agile', 'scrum',
-    'tdd', 'bdd', 'microservices', 'api design', 'system design',
-    'unit testing', 'integration testing', 'cypress', 'selenium', 'jest',
-    'pytest', 'postman', 'swagger', 'openapi',
-    // Data science specific
-    'statistics', 'a/b testing', 'ab testing', 'hypothesis testing',
-    'regression', 'classification', 'clustering', 'feature engineering',
-    'data visualization', 'data analysis', 'data modeling', 'data pipeline',
-    'time series', 'recommendation systems', 'neural networks',
-];
-
-function extractSkillsFromText(text: string): string[] {
-    if (!text) return [];
-    const lower = text.toLowerCase();
-    const found: string[] = [];
-    for (const skill of KNOWN_SKILLS) {
-        // Use word-boundary-like check to avoid false positives
-        const idx = lower.indexOf(skill);
-        if (idx !== -1) {
-            const before = idx > 0 ? lower[idx - 1] : ' ';
-            const after = idx + skill.length < lower.length ? lower[idx + skill.length] : ' ';
-            const isBoundary = (c: string) => /[\s,;.()\[\]{}\-\/"'!?:&|<>]/.test(c);
-            if (isBoundary(before) && isBoundary(after)) {
-                // Normalise display name
-                const display = skill.charAt(0).toUpperCase() + skill.slice(1);
-                if (!found.includes(display)) found.push(display);
-            }
-        }
-    }
-    return found;
-}
-
+// Local skills extraction removed. Now using SkillsService with LLM.
 // ---------------------------------------------------------------------------
 // Archetype Detection — inspired by career-ops role classification
 // ---------------------------------------------------------------------------
@@ -166,9 +107,7 @@ function analyzeSkillGap(
     const normalise = (s: string) => s.toLowerCase().trim();
 
     const allVSkillsSet = new Set((vSkills || []).map(normalise));
-    if (vDesc) {
-        for (const s of extractSkillsFromText(vDesc)) allVSkillsSet.add(normalise(s));
-    }
+    // Local skills extraction removed. Desc is now processed during save.
 
     if (pSkills.length === 0 || allVSkillsSet.size === 0) {
         return { matchedSkills: [], missingSkills: [], score: 50 };
@@ -344,6 +283,7 @@ export class VacanciesService {
         private readonly prisma: PrismaService,
         private readonly configService: ConfigService,
         private readonly aiService: AiService,
+        private readonly skillsService: SkillsService,
     ) { }
 
     /**
@@ -529,6 +469,8 @@ export class VacanciesService {
 
                 const descriptionRaw = item.description || '';
                 const descriptionPreview = this.cleanHtml(descriptionRaw).slice(0, 200) + (descriptionRaw.length > 200 ? '...' : '');
+                const extractedSkills = await this.skillsService.extractFromText(descriptionRaw, true);
+                const rawSkills = extractedSkills.map(s => s.name);
 
                 const upserted = await this.prisma.vacancy.upsert({
                     where: { hhId: String(item.id) },
@@ -541,7 +483,7 @@ export class VacanciesService {
                         salaryFrom,
                         salaryTo,
                         salaryCurrency: 'GBP',
-                        skills: extractSkillsFromText(descriptionRaw),
+                        skills: rawSkills,
                         descriptionPreview,
                         experience: null,
                         schedule: mapSchedule(item.contract_type, item.contract_time),
@@ -559,6 +501,13 @@ export class VacanciesService {
                 });
 
                 saved.push(upserted);
+
+                // Sync normalized skills asynchronously (non-blocking)
+                if (rawSkills.length > 0) {
+                    this.skillsService.syncVacancySkills(upserted.id, rawSkills)
+                        .catch(e => this.logger.warn(`Skills sync failed for vacancy ${upserted.id}: ${e.message}`));
+                }
+
             } catch (e: any) {
                 this.logger.warn(`[Adzuna API] Upsert failed for ${item.id}: ${e.message}`);
             }
@@ -671,4 +620,36 @@ export class VacanciesService {
 
         return this.aiService.generateInterviewPrep(vacancy, resume.content);
     }
+
+    /**
+     * Generate AI cover letter for a vacancy based on user's resume
+     */
+    async generateCoverLetter(id: string, resumeId?: string, language: 'ru' | 'en' = 'ru'): Promise<{ coverLetter: string } | { noResume: true }> {
+        // Find the vacancy safely
+        let vacancy: any = null;
+        try {
+            vacancy = await this.prisma.vacancy.findUnique({ where: { id } });
+        } catch (e) {
+            vacancy = await this.prisma.vacancy.findUnique({ where: { hhId: id } });
+        }
+
+        if (!vacancy) {
+            throw new Error(`Vacancy with ID ${id} not found`);
+        }
+
+        // Find the resume
+        let resume: any = null;
+        if (resumeId && resumeId !== 'all') {
+            resume = await this.prisma.resume.findUnique({ where: { id: resumeId } });
+        } else {
+            resume = await this.prisma.resume.findFirst({ orderBy: { updatedAt: 'desc' } });
+        }
+
+        if (!resume) {
+            return { noResume: true };
+        }
+
+        return this.aiService.generateCoverLetter(vacancy, resume.content, language);
+    }
 }
+

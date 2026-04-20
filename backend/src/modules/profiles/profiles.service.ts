@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SkillsService } from '../skills/skills.service';
 
 /** Convert DTO to Prisma-compatible data (Json fields must be cast to any) */
 function toProfileData(dto: CreateProfileDto | UpdateProfileDto) {
@@ -15,9 +16,26 @@ function toProfileData(dto: CreateProfileDto | UpdateProfileDto) {
     };
 }
 
+/**
+ * Skills from the frontend arrive as { technical: string[], professional: string[] }.
+ * This helper flattens that into a single string[] for normalization.
+ * Also handles the case where skills is already a plain string[].
+ */
+function flattenSkills(skills: any): string[] {
+    if (!skills) return [];
+    if (Array.isArray(skills)) return skills.filter((s): s is string => typeof s === 'string');
+    const result: string[] = [];
+    if (Array.isArray(skills.technical)) result.push(...skills.technical.filter((s: any) => typeof s === 'string'));
+    if (Array.isArray(skills.professional)) result.push(...skills.professional.filter((s: any) => typeof s === 'string'));
+    return result;
+}
+
 @Injectable()
 export class ProfilesService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private readonly skillsService: SkillsService,
+    ) { }
 
     private async getPocUserId(providedId?: string) {
         if (providedId) return providedId;
@@ -37,6 +55,9 @@ export class ProfilesService {
                     orderBy: { createdAt: 'desc' },
                     take: 1,
                 },
+                profileSkills: {
+                    include: { skill: true },
+                },
             },
         });
         if (!profile) {
@@ -48,11 +69,19 @@ export class ProfilesService {
     async createProfile(userId: string | undefined, createProfileDto: CreateProfileDto) {
         const id = await this.getPocUserId(userId);
         const data = toProfileData(createProfileDto);
-        return this.prisma.profile.upsert({
+        const profile = await this.prisma.profile.upsert({
             where: { userId: id },
             update: data,
             create: { userId: id, ...data },
         });
+
+        // Sync normalized skills — flatten { technical, professional } → string[]
+        const flatSkills = flattenSkills((createProfileDto as any).skills);
+        if (flatSkills.length > 0) {
+            await this.skillsService.syncProfileSkills(profile.id, flatSkills);
+        }
+
+        return profile;
     }
 
     async updateProfile(userId: string | undefined, updateProfileDto: UpdateProfileDto) {
@@ -62,10 +91,18 @@ export class ProfilesService {
             throw new NotFoundException('Profile not found. Create a profile first.');
         }
         const data = toProfileData(updateProfileDto);
-        return this.prisma.profile.update({
+        const updated = await this.prisma.profile.update({
             where: { userId: id },
             data,
         });
+
+        // Sync normalized skills — flatten { technical, professional } → string[]
+        const flatSkills = flattenSkills((updateProfileDto as any).skills);
+        if (flatSkills.length > 0) {
+            await this.skillsService.syncProfileSkills(updated.id, flatSkills);
+        }
+
+        return updated;
     }
 
     async deleteProfile(userId?: string) {

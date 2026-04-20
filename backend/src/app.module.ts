@@ -8,6 +8,7 @@ import { ResumesModule } from './modules/resumes/resumes.module';
 import { InterviewsModule } from './modules/interviews/interviews.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AiModule } from './modules/ai/ai.module';
+import { SkillsModule } from './modules/skills/skills.module';
 import { HealthController } from './health.controller';
 import { AppController } from './app.controller';
 import { UsersModule } from './modules/users/users.module';
@@ -39,6 +40,7 @@ import { RedisModule } from './modules/redis/redis.module';
         InterviewsModule,
         AnalyticsModule,
         AiModule,
+        SkillsModule,
     ],
     controllers: [HealthController, AppController],
     providers: [],

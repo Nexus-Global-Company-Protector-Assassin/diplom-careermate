@@ -135,4 +135,18 @@ export class VacanciesController {
     async getEvaluation(@Param('id') id: string, @Query('resumeId') resumeId?: string) {
         return this.vacanciesService.evaluateVacancy(id, resumeId);
     }
+
+    @Get(':id/cover-letter')
+    @ApiOperation({ summary: 'Generate AI cover letter for a vacancy based on user resume' })
+    @ApiParam({ name: 'id', description: 'Vacancy ID' })
+    @ApiQuery({ name: 'resumeId', required: false, description: 'Resume ID to use for cover letter generation' })
+    @ApiQuery({ name: 'language', required: false, description: 'Language for cover letter: ru or en', enum: ['ru', 'en'] })
+    async getCoverLetter(
+        @Param('id') id: string,
+        @Query('resumeId') resumeId?: string,
+        @Query('language') language: 'ru' | 'en' = 'ru',
+    ) {
+        return this.vacanciesService.generateCoverLetter(id, resumeId, language);
+    }
 }
+

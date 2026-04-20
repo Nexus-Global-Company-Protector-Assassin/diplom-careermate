@@ -54,6 +54,7 @@ model Profile {
   resumes             Resume[]
   interviews          Interview[]
   vacancyResponses    VacancyResponse[]
+  profileSkills       ProfileSkill[]
 }
 
 model AnalysisResult {
@@ -117,7 +118,7 @@ model Vacancy {
   salaryTo           Int?
   salaryCurrency     String?
   salaryLabel        String?
-  skills             Json?    // Массив ключевых навыков
+  skills             Json?    // Массив ключевых навыков (legacy, сохранён для fallback)
   descriptionPreview String?
   experience         String?
   schedule           String?
@@ -125,4 +126,43 @@ model Vacancy {
   searchQuery        String   // Поисковый запрос, по которому найдена вакансия
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  vacancySkills      VacancySkill[]
+}
+
+// ---------------------------------------------------------------------------
+// Normalized Skills System
+// ---------------------------------------------------------------------------
+
+model Skill {
+  id        String   @id @default(uuid())
+  name      String   @unique // Canonical name: "React", "PostgreSQL", "Docker"
+  category  String?  // "Frontend" | "Backend" | "DevOps" | "Data" | "Mobile" | "Soft"
+  aliases   String[] // ["react.js", "reactjs"] for fuzzy lookup
+  createdAt DateTime @default(now())
+
+  profileSkills ProfileSkill[]
+  vacancySkills VacancySkill[]
+}
+
+model ProfileSkill {
+  profileId String
+  skillId   String
+  level     String? // "beginner" | "intermediate" | "expert"
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, skillId])
+}
+
+model VacancySkill {
+  vacancyId  String
+  skillId    String
+  isRequired Boolean @default(true)
+
+  vacancy Vacancy @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([vacancyId, skillId])
 }

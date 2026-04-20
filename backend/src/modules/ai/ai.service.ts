@@ -304,4 +304,119 @@ ${vacancyText}
             };
         }
     }
+
+    async generateCoverLetter(vacancy: any, resumeContent: string, language: 'ru' | 'en' = 'ru'): Promise<{ coverLetter: string }> {
+        const apiKey = this.configService.get<string>('LLM_API_KEY');
+        const baseUrl = this.configService.get<string>('LLM_API_BASE_URL', 'https://api.openai.com/v1');
+        const modelName = this.configService.get<string>('LLM_MODEL_NAME_SMART', 'google/gemini-3.1-flash-lite-preview');
+
+        const isEn = language === 'en';
+
+        const vacancyText = isEn
+            ? [
+                `Position: ${vacancy?.title}`,
+                `Employer: ${vacancy?.employer}`,
+                `Location: ${vacancy?.location || 'Not specified'}`,
+                `Salary: ${vacancy?.salaryLabel || 'Not specified'}`,
+                `Format: ${vacancy?.schedule || 'Not specified'}`,
+                `Job description: ${vacancy?.descriptionPreview || ''}`,
+                `Required skills: ${JSON.stringify(vacancy?.skills || [])}`,
+            ].filter(Boolean).join('\n')
+            : [
+                `Должность: ${vacancy?.title}`,
+                `Работодатель: ${vacancy?.employer}`,
+                `Местоположение: ${vacancy?.location || 'Не указано'}`,
+                `Зарплата: ${vacancy?.salaryLabel || 'Не указана'}`,
+                `Формат: ${vacancy?.schedule || 'Не указан'}`,
+                `Описание вакансии: ${vacancy?.descriptionPreview || ''}`,
+                `Требуемые навыки: ${JSON.stringify(vacancy?.skills || [])}`,
+            ].filter(Boolean).join('\n');
+
+        const prompt = isEn
+            ? `You are a professional career consultant. Write a personalized cover letter in English for a candidate applying for the following job.
+
+JOB DETAILS:
+${vacancyText}
+
+CANDIDATE RESUME:
+${resumeContent}
+
+REQUIREMENTS:
+1. Length: 3-4 paragraphs (250-350 words)
+2. Tone: professional yet genuine — avoid generic clichés like "Dear Hiring Manager" or "I am writing to express my interest"
+3. Structure:
+   - Opening paragraph: who the candidate is, which role they're applying for, why this company/role specifically appeals to them
+   - 1-2 body paragraphs: specific achievements from the resume relevant to the job requirements; mention 2-3 matching skills with numbers/results
+   - Closing: express interest in an interview, mention availability
+4. Do NOT invent facts that are not in the resume
+5. Write in first person
+6. Avoid clichés: "I would like to", "My name is", "Sincerely yours"
+
+Return ONLY the cover letter text — no comments, JSON, or markdown.`
+            : `Ты — профессиональный карьерный консультант. Напиши персонализированное сопроводительное письмо на русском языке для кандидата, который хочет откликнуться на вакансию.
+
+ДАННЫЕ ВАКАНСИИ:
+${vacancyText}
+
+РЕЗЮМЕ КАНДИДАТА:
+${resumeContent}
+
+ТРЕБОВАНИЯ К ПИСЬМУ:
+1. Объём: 3-4 абзаца (250-350 слов)
+2. Тон: профессиональный, но живой — без шаблонных клише вроде "Уважаемый работодатель"
+3. Структура:
+   - Вводный абзац: кто кандидат, на какую позицию откликается, почему именно эта компания/роль
+   - 1-2 абзаца: конкретные достижения из резюме, которые релевантны требованиям вакансии; упомяни 2-3 совпадающих навыка с цифрами/результатами
+   - Заключение: выразить интерес к встрече, указать готовность обсудить детали
+4. НЕ выдумывай факты, которых нет в резюме
+5. Пиши от первого лица
+6. Не используй шаблонные фразы: "Я хотел бы", "Меня зовут", "С уважением"
+
+Верни ТОЛЬКО текст письма без каких-либо комментариев, JSON или markdown-форматирования.`;
+
+        const systemPrompt = isEn
+            ? 'You are a professional career consultant at CareerMate platform. You write personalized cover letters based on the candidate\'s resume and job description. Reply with the letter text only — no markdown, no comments.'
+            : 'Ты — профессиональный карьерный консультант платформы CareerMate. Пишешь персонализированные сопроводительные письма на основе резюме кандидата и описания вакансии. Отвечай только текстом письма без markdown и комментариев.';
+
+        if (!apiKey) {
+            this.logger.warn('LLM_API_KEY is not set. Using mocked cover letter.');
+            const mockLetter = isEn
+                ? `Good day!\n\nI am excited to apply for the ${vacancy?.title} position at ${vacancy?.employer}. My experience and skills closely match the requirements outlined in the job description, and I am confident I can make a meaningful contribution to your team.\n\nThroughout my career, I have successfully tackled challenges similar to those described in this role. My core competencies align directly with the position's requirements, allowing me to contribute from day one.\n\nI would welcome the opportunity to discuss this role further. Please feel free to reach out at your convenience.\n\n[Mock Mode — add LLM_API_KEY to .env for personalized generation]`
+                : `Добрый день!\n\nМеня заинтересовала вакансия ${vacancy?.title} в компании ${vacancy?.employer}. Мой опыт и навыки хорошо соответствуют описанным требованиям, и я уверен, что смогу внести значимый вклад в работу вашей команды.\n\nВ ходе своей карьеры я успешно работал над задачами, аналогичными тем, что указаны в описании вакансии. Мои ключевые компетенции включают области, напрямую связанные с требованиями позиции, что позволит мне быстро включиться в рабочие процессы.\n\nГотов обсудить детали сотрудничества на собеседовании. Буду рад ответить на ваши вопросы и рассмотреть все возможные варианты.\n\n[Mock Mode — добавьте LLM_API_KEY в .env для персонализированной генерации]`;
+            return { coverLetter: mockLetter };
+        }
+
+        try {
+            const response = await firstValueFrom(
+                this.httpService.post(
+                    `${baseUrl}/chat/completions`,
+                    {
+                        model: modelName,
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: prompt },
+                        ],
+                        max_tokens: 1000,
+                        temperature: 0.4,
+                    },
+                    {
+                        headers: {
+                            Authorization: `Bearer ${apiKey}`,
+                            'Content-Type': 'application/json',
+                        },
+                    }
+                )
+            );
+
+            const coverLetter = response.data.choices[0]?.message?.content?.trim() || '';
+            return { coverLetter };
+        } catch (error: any) {
+            this.logger.error(`LLM Error generating cover letter: ${error.message}`);
+            const fallback = isEn
+                ? `Dear Hiring Team,\n\nI am writing to express my interest in the ${vacancy?.title} position at ${vacancy?.employer}. Please find my resume attached for your consideration.\n\nBest regards`
+                : `Добрый день!\n\nХочу откликнуться на вакансию ${vacancy?.title} в компании ${vacancy?.employer}. Прошу рассмотреть моё резюме.\n\nС уважением`;
+            return { coverLetter: fallback };
+        }
+    }
 }
+

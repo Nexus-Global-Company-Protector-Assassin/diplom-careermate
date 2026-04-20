@@ -1,9 +1,11 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { AiService } from './ai.service';
 
 @ApiTags('AI')
 @Controller('ai')
+@UseGuards(ThrottlerGuard)
 export class AiController {
     constructor(private readonly aiService: AiService) {}
 
