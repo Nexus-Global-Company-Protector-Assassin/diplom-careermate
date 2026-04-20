@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AiService } from '../ai/ai.service';
 import { SkillsService } from '../skills/skills.service';
+import { EmbeddingsService } from '../ai/embeddings/embeddings.service';
 
 // Adzuna API base URL
 const ADZUNA_API = 'https://api.adzuna.com/v1/api/jobs';
@@ -284,6 +285,7 @@ export class VacanciesService {
         private readonly configService: ConfigService,
         private readonly aiService: AiService,
         private readonly skillsService: SkillsService,
+        private readonly embeddingsService: EmbeddingsService,
     ) { }
 
     /**
@@ -518,6 +520,15 @@ export class VacanciesService {
                     this.skillsService.syncVacancySkills(upserted.id, rawSkills)
                         .catch(e => this.logger.warn(`Skills sync failed for vacancy ${upserted.id}: ${e.message}`));
                 }
+
+                // Index in Pinecone for semantic search (non-blocking, errors caught inside service)
+                const embeddingText = [
+                    upserted.title,
+                    upserted.employer,
+                    upserted.descriptionPreview,
+                    rawSkills.join(', '),
+                ].filter(Boolean).join(' ');
+                this.embeddingsService.indexVacancy(upserted.id, embeddingText);
 
             } catch (e: any) {
                 this.logger.warn(`[Adzuna API] Upsert failed for ${item.id}: ${e.message}`);
