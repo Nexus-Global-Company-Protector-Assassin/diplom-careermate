@@ -55,13 +55,13 @@ export function detectArchetype(title: string, description: string): RoleArchety
 // Vacancy Freshness Score — returns 0-100
 // Inspired by career-ops Block G: Posting Legitimacy
 // ---------------------------------------------------------------------------
-export function calcVacancyFreshness(createdAt: Date, updatedAt?: Date | null): {
+export function calcVacancyFreshness(publishedAt: Date | null | undefined, createdAt: Date, updatedAt?: Date | null): {
     score: number;
     label: string;
     daysOld: number;
 } {
     const now = new Date();
-    const ref = updatedAt || createdAt;
+    const ref = publishedAt || updatedAt || createdAt;
     const daysOld = Math.floor((now.getTime() - new Date(ref).getTime()) / (1000 * 60 * 60 * 24));
 
     let score: number;
@@ -290,6 +290,9 @@ export class VacanciesService {
      * Get vacancies from DB with optional filters
      */
     async getVacancies(filters: VacancyFilters = {}) {
+        // Clean up expired vacancies before returning results
+        await this.cleanupExpiredVacancies();
+
         const { query, salaryFrom, salaryTo, remote, experience, limit = 20 } = filters;
 
         const where: any = {};
@@ -331,7 +334,7 @@ export class VacanciesService {
 
         return this.prisma.vacancy.findMany({
             where,
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
             take: limit,
         });
     }
@@ -362,11 +365,14 @@ export class VacanciesService {
         }
 
         // Fetch all vacancies related to the position
+        // Clean up expired vacancies
+        await this.cleanupExpiredVacancies();
+
         const vacancies = await this.prisma.vacancy.findMany({
             where: position
                 ? { searchQuery: { contains: position, mode: 'insensitive' } }
                 : {},
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
             take: 50, // fetch wider set, rank by match
         });
 
@@ -400,7 +406,7 @@ export class VacanciesService {
                 })();
 
                 // Freshness (Ghost Job pre-check)
-                const freshness = calcVacancyFreshness(v.createdAt, v.updatedAt);
+                const freshness = calcVacancyFreshness(v.publishedAt, v.createdAt, v.updatedAt);
 
                 return { ...v, matchScore, archetype, ...gap, freshness };
             })
@@ -472,6 +478,9 @@ export class VacanciesService {
                 const extractedSkills = await this.skillsService.extractFromText(descriptionRaw, true);
                 const rawSkills = extractedSkills.map(s => s.name);
 
+                // Parse publication date from Adzuna API
+                const publishedAt = item.created ? new Date(item.created) : null;
+
                 const upserted = await this.prisma.vacancy.upsert({
                     where: { hhId: String(item.id) },
                     create: {
@@ -489,6 +498,7 @@ export class VacanciesService {
                         schedule: mapSchedule(item.contract_type, item.contract_time),
                         url: item.redirect_url ?? null,
                         searchQuery: query,
+                        publishedAt,
                     },
                     update: {
                         title: item.title ?? query,
@@ -496,6 +506,7 @@ export class VacanciesService {
                         schedule: mapSchedule(item.contract_type, item.contract_time),
                         url: item.redirect_url ?? null,
                         searchQuery: query,
+                        publishedAt,
                         updatedAt: new Date(),
                     },
                 });
@@ -529,6 +540,36 @@ export class VacanciesService {
             .replace(/&gt;/g, '>')
             .replace(/\s+/g, ' ')
             .trim();
+    }
+
+    /**
+     * Remove vacancies that are no longer active (published more than 60 days ago)
+     */
+    private async cleanupExpiredVacancies() {
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - 60);
+
+        try {
+            const deleted = await this.prisma.vacancy.deleteMany({
+                where: {
+                    OR: [
+                        // Vacancies with publishedAt older than 60 days
+                        { publishedAt: { lt: cutoffDate } },
+                        // Vacancies without publishedAt where createdAt is older than 60 days
+                        {
+                            publishedAt: null,
+                            createdAt: { lt: cutoffDate },
+                        },
+                    ],
+                },
+            });
+
+            if (deleted.count > 0) {
+                this.logger.log(`[Cleanup] Removed ${deleted.count} expired vacancies (older than 60 days)`);
+            }
+        } catch (e: any) {
+            this.logger.warn(`[Cleanup] Failed to clean up expired vacancies: ${e.message}`);
+        }
     }
 
     /**

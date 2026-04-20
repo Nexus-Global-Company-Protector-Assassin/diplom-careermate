@@ -304,7 +304,7 @@ export function VacanciesContent() {
           title: v.title,
           location: v.location || "Не указано",
           type: v.schedule || "Полная занятость",
-          posted: new Date(v.createdAt).toLocaleDateString("ru-RU"),
+          posted: new Date(v.publishedAt || v.createdAt).toLocaleDateString("ru-RU"),
           skills: v.skills || [],
           salary: v.salaryLabel || "Зарплата не указана",
           match: String(score),

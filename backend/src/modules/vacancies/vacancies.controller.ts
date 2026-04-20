@@ -68,7 +68,7 @@ export class VacanciesController {
             title: v.title,
             location: v.location || 'Не указано',
             type: v.schedule || 'Полная занятость',
-            posted: v.createdAt ? this.formatDate(v.createdAt) : 'Недавно',
+            posted: v.publishedAt ? this.formatDate(v.publishedAt) : (v.createdAt ? this.formatDate(v.createdAt) : 'Недавно'),
             skills: Array.isArray(v.skills) ? v.skills : [],
             salary: v.salaryLabel || 'Зарплата не указана',
             salaryFrom: v.salaryFrom || null,

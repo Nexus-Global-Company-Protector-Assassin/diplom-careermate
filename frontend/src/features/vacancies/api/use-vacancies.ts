@@ -17,6 +17,7 @@ export interface Vacancy {
   schedule: string | null;
   searchQuery: string;
   createdAt: string;
+  publishedAt: string | null;
   updatedAt: string;
   url?: string | null;
   archetype?: string;

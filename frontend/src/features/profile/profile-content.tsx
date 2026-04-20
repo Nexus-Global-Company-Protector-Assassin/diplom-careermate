@@ -338,15 +338,6 @@ export function ProfileContent() {
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-foreground">Профиль</h1>
-        <Button 
-            size="lg" 
-            onClick={handleRunPoc} 
-            disabled={isPending || !personalData.fullName}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 transition-all outline outline-0 hover:outline-2 outline-offset-2 outline-blue-500"
-        >
-            <Sparkles className="w-5 h-5 mr-2" />
-            {isPending ? "Анализируем..." : "Симуляция 🧠"}
-        </Button>
       </div>
 
       {/* Personal Data */}

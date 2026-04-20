@@ -109,8 +109,8 @@ model VacancyResponse {
 }
 
 model Vacancy {
-  id                 String   @id @default(uuid())
-  hhId               String   @unique  // ID вакансии на HH.ru
+  id                 String    @id @default(uuid())
+  hhId               String    @unique  // ID вакансии на HH.ru
   title              String
   employer           String
   location           String?
@@ -124,8 +124,9 @@ model Vacancy {
   schedule           String?
   url                String?  // Ссылка на оригинальную вакансию
   searchQuery        String   // Поисковый запрос, по которому найдена вакансия
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  publishedAt        DateTime? // Дата публикации вакансии на площадке
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   vacancySkills      VacancySkill[]
 }
