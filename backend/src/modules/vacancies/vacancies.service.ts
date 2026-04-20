@@ -370,7 +370,7 @@ export class VacanciesService {
         // Clean up expired vacancies
         await this.cleanupExpiredVacancies();
 
-        const vacancies = await this.prisma.vacancy.findMany({
+        const dbVacancies: any[] = await this.prisma.vacancy.findMany({
             where: position
                 ? { searchQuery: { contains: position, mode: 'insensitive' } }
                 : {},
@@ -378,8 +378,34 @@ export class VacanciesService {
             take: 50, // fetch wider set, rank by match
         });
 
-        // Calculate match, archetype, gap, and freshness for each
-        const ranked = vacancies
+        // ── Semantic re-ranking via Pinecone ─────────────────────────────────
+        const queryText = [position, ...profileSkills].filter(Boolean).join(' ');
+        const semanticRank = new Map<string, number>(); // vacancyId → normalized score 0–1
+
+        try {
+            const semanticIds = await this.embeddingsService.searchSimilar(queryText, 20);
+
+            // Fetch any Pinecone results not already in the keyword set
+            const dbIdSet = new Set(dbVacancies.map((v: any) => v.id));
+            const extraIds = semanticIds.filter(id => !dbIdSet.has(id));
+            if (extraIds.length > 0) {
+                const extra = await this.prisma.vacancy.findMany({
+                    where: { id: { in: extraIds } },
+                });
+                dbVacancies.push(...extra);
+            }
+
+            // Normalize position → score: rank 0 = 1.0, last rank ≈ 0
+            semanticIds.forEach((id, idx) => {
+                semanticRank.set(id, 1 - idx / Math.max(semanticIds.length, 1));
+            });
+        } catch (e: any) {
+            this.logger.warn(`[Semantic] Search failed, using keyword-only: ${e.message}`);
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Calculate match, archetype, gap, freshness, and combined score for each
+        const ranked = dbVacancies
             .map((v: any) => {
                 const skills = Array.isArray(v.skills) ? (v.skills as string[]) : [];
                 const desc = v.descriptionPreview || '';
@@ -410,10 +436,14 @@ export class VacanciesService {
                 // Freshness (Ghost Job pre-check)
                 const freshness = calcVacancyFreshness(v.publishedAt, v.createdAt, v.updatedAt);
 
-                return { ...v, matchScore, archetype, ...gap, freshness };
+                // Hybrid score: 60% keyword match + 40% semantic similarity
+                const semanticScore = semanticRank.get(v.id) ?? 0;
+                const combinedScore = 0.6 * (matchScore / 100) + 0.4 * semanticScore;
+
+                return { ...v, matchScore, archetype, ...gap, freshness, semanticScore, combinedScore };
             })
-            .filter((v: any) => v.matchScore > 20)
-            .sort((a: any, b: any) => b.matchScore - a.matchScore)
+            .filter((v: any) => v.matchScore > 20 || v.semanticScore > 0.3)
+            .sort((a: any, b: any) => b.combinedScore - a.combinedScore)
             .slice(0, limit);
 
         return ranked;
