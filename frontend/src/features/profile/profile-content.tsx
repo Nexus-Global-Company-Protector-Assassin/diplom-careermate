@@ -13,6 +13,7 @@ import { useUploadResume } from "@/features/profile/api/use-upload-resume"
 import { ProfileDto, ParsedProfileDto, PocRunResponseDto } from "@/shared/api"
 import { toast } from "sonner"
 import { useProfile, useUpdateProfile } from "./api/use-profile"
+import { UnifiedSkillsCard } from "./skills-analysis-card"
 
 interface PersonalData {
   fullName: string
@@ -460,41 +461,13 @@ export function ProfileContent() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Skills */}
-      <Card className="bg-card border-border">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10">
-                <Wrench className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <h2 className="text-lg font-semibold text-card-foreground">Навыки</h2>
-            </div>
-            <Button onClick={openSkillsModal} size="sm" className="bg-blue-600 hover:bg-blue-700">
-              Редактировать →
-            </Button>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <h3 className="font-medium mb-2 text-card-foreground">Технические:</h3>
-              <ul className="list-disc list-inside text-sm text-blue-600 dark:text-blue-400 space-y-1">
-                {skills.technical.map((skill, i) => (
-                  <li key={i}>{skill}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-medium mb-2 text-card-foreground">Профессиональные:</h3>
-              <ul className="list-disc list-inside text-sm text-blue-600 dark:text-blue-400 space-y-1">
-                {skills.professional.map((skill, i) => (
-                  <li key={i}>{skill}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Skills — unified card with raw + AI-normalized */}
+      <UnifiedSkillsCard
+        technicalSkills={skills.technical}
+        professionalSkills={skills.professional}
+        normalizedSkills={profileData?.profileSkills ?? []}
+        onEdit={openSkillsModal}
+      />
 
       {/* Personal Data Modal */}
       <Dialog open={personalModalOpen} onOpenChange={setPersonalModalOpen}>

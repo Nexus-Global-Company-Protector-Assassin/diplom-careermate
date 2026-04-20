@@ -22,12 +22,14 @@ import {
   ExternalLink,
   FileText,
   Mic,
+  Copy,
+  Languages,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { Label } from "@/shared/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select"
 import { Checkbox } from "@/shared/ui/checkbox"
-import { useRecommendedVacancies, useApplyToVacancy, useToggleFavorite, useAdzunaVacancies, useAdzunaParse, useEvaluateVacancy, useInterviewPrep, Vacancy, VacancySearchFilters } from "./api/use-vacancies"
+import { useRecommendedVacancies, useApplyToVacancy, useToggleFavorite, useAdzunaVacancies, useAdzunaParse, useEvaluateVacancy, useInterviewPrep, useGenerateCoverLetter, Vacancy, VacancySearchFilters } from "./api/use-vacancies"
 import { useResumesHistory } from "@/features/resume/api/use-resumes"
 import { useProfile } from "@/features/profile/api/use-profile"
 
@@ -96,6 +98,13 @@ export function VacanciesContent() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [appliedJobs, setAppliedJobs] = useState<string[]>([])
   const [selectedResumeId, setSelectedResumeId] = useState<string>("")
+
+  // Cover letter states
+  const [coverLetter, setCoverLetter] = useState<string>("")
+  const [coverLetterLanguage, setCoverLetterLanguage] = useState<'ru' | 'en'>('ru')
+  const [coverLetterCopied, setCoverLetterCopied] = useState(false)
+  const [coverLetterNoResume, setCoverLetterNoResume] = useState(false)
+  const { mutateAsync: generateCoverLetter, isPending: isGeneratingLetter } = useGenerateCoverLetter()
 
   // Analysis Modal States
   const [analysisModalOpen, setAnalysisModalOpen] = useState(false)
@@ -337,17 +346,65 @@ export function VacanciesContent() {
     toggleFavApi({ vacancyId: id, isFavorite: isFav })
   }
 
-  const handleApply = (job: Job) => {
+  const handleApply = async (job: Job) => {
     setSelectedJob(job)
+    setCoverLetter("")
+    setCoverLetterNoResume(false)
+    setCoverLetterCopied(false)
     setApplyModalOpen(true)
+    try {
+      const res = await generateCoverLetter({
+        vacancyId: job.id,
+        resumeId: selectedResumeId || undefined,
+        language: coverLetterLanguage,
+      })
+      if ('noResume' in res) {
+        setCoverLetterNoResume(true)
+      } else {
+        setCoverLetter(res.coverLetter)
+      }
+    } catch (e) {
+      console.error('Cover letter generation failed', e)
+      // Fallback: empty textarea for manual input
+    }
+  }
+
+  const handleRegenerateLetter = async () => {
+    if (!selectedJob) return
+    setCoverLetter("")
+    setCoverLetterNoResume(false)
+    setCoverLetterCopied(false)
+    try {
+      const res = await generateCoverLetter({
+        vacancyId: selectedJob.id,
+        resumeId: selectedResumeId || undefined,
+        language: coverLetterLanguage,
+      })
+      if ('noResume' in res) {
+        setCoverLetterNoResume(true)
+      } else {
+        setCoverLetter(res.coverLetter)
+      }
+    } catch (e) {
+      console.error('Cover letter generation failed', e)
+    }
+  }
+
+  const handleCopyLetter = () => {
+    if (coverLetter) {
+      navigator.clipboard.writeText(coverLetter)
+      setCoverLetterCopied(true)
+      setTimeout(() => setCoverLetterCopied(false), 2000)
+    }
   }
 
   const confirmApply = () => {
     if (selectedJob) {
-      applyToJob({ vacancyId: selectedJob.id })
+      applyToJob({ vacancyId: selectedJob.id, coverLetter: coverLetter || undefined })
       setAppliedJobs((prev) => [...prev, selectedJob.id])
       setApplyModalOpen(false)
       setSelectedJob(null)
+      setCoverLetter("")
     }
   }
 
@@ -773,41 +830,134 @@ export function VacanciesContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Apply Modal */}
+      {/* Apply Modal — AI Cover Letter */}
       <Dialog open={applyModalOpen} onOpenChange={setApplyModalOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-card border-border">
+        <DialogContent className="sm:max-w-[560px] bg-card border-border">
           <DialogHeader>
-            <DialogTitle className="text-card-foreground">Откликнуться на вакансию</DialogTitle>
+            <DialogTitle className="text-card-foreground flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-green-500" />
+              Отклик на вакансию
+            </DialogTitle>
           </DialogHeader>
+
           {selectedJob && (
-            <div className="py-4">
-              <div className="flex items-center gap-4 p-4 rounded-lg bg-muted mb-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-xl font-bold text-white">
+            <div className="py-2 space-y-4">
+              {/* Job info */}
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-lg font-bold text-white shrink-0">
                   {selectedJob.logo}
                 </div>
-                <div>
-                  <h4 className="font-semibold text-card-foreground">{selectedJob.title}</h4>
-                  <p className="text-sm text-muted-foreground">{selectedJob.company}</p>
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-card-foreground truncate">{selectedJob.title}</h4>
+                  <p className="text-xs text-muted-foreground">{selectedJob.company}</p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground mb-4">
-                Ваше резюме "Data Analyst - Современный" будет отправлено работодателю. Вы также можете добавить
-                сопроводительное письмо.
-              </p>
-              <div className="space-y-2">
-                <Label className="text-card-foreground">Сопроводительное письмо (опционально)</Label>
-                <textarea
-                  className="w-full min-h-[100px] rounded-lg border border-border bg-background p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Добавьте сопроводительное письмо..."
-                />
+
+              {/* Language toggle + Regenerate */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Languages className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Язык письма:</span>
+                  <div className="flex rounded-md border border-border overflow-hidden text-sm">
+                    <button
+                      onClick={() => setCoverLetterLanguage('ru')}
+                      className={`px-3 py-1 transition-colors ${
+                        coverLetterLanguage === 'ru'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-card text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      RU
+                    </button>
+                    <button
+                      onClick={() => setCoverLetterLanguage('en')}
+                      className={`px-3 py-1 transition-colors ${
+                        coverLetterLanguage === 'en'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-card text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      EN
+                    </button>
+                  </div>
+                </div>
+                {!isGeneratingLetter && !coverLetterNoResume && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRegenerateLetter}
+                    className="gap-1.5 text-xs bg-transparent border-border"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Перегенерировать
+                  </Button>
+                )}
               </div>
+
+              {/* Content area */}
+              {isGeneratingLetter ? (
+                <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-green-500" />
+                  <p className="text-sm text-muted-foreground animate-pulse text-center">
+                    ✨ Генерируем персонализированное письмо...<br />
+                    <span className="text-xs">Анализируем вакансию и ваше резюме</span>
+                  </p>
+                </div>
+              ) : coverLetterNoResume ? (
+                <div className="flex flex-col items-center justify-center py-8 space-y-3">
+                  <FileText className="h-10 w-10 text-muted-foreground" />
+                  <h3 className="text-base font-semibold text-foreground">Резюме не найдено</h3>
+                  <p className="text-sm text-muted-foreground text-center max-w-xs">
+                    Для генерации письма нужно сначала создать резюме на основе вашего профиля.
+                  </p>
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700 gap-2 text-sm"
+                    onClick={() => { setApplyModalOpen(false); router.push('/resume'); }}
+                  >
+                    <FileText className="h-4 w-4" /> Создать резюме
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-card-foreground text-sm">Сопроводительное письмо</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopyLetter}
+                      className="h-7 px-2 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      disabled={!coverLetter}
+                    >
+                      {coverLetterCopied
+                        ? <><Check className="h-3 w-3 text-green-500" /> Скопировано</>  
+                        : <><Copy className="h-3 w-3" /> Копировать</>
+                      }
+                    </Button>
+                  </div>
+                  <textarea
+                    value={coverLetter}
+                    onChange={(e) => setCoverLetter(e.target.value)}
+                    className="w-full min-h-[200px] rounded-lg border border-border bg-background p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed"
+                    placeholder={coverLetter ? '' : 'Напишите сопроводительное письмо вручную...'}
+                  />
+                  {coverLetter && (
+                    <p className="text-xs text-muted-foreground text-right">{coverLetter.length} символов</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setApplyModalOpen(false)} className="bg-transparent border-border">
               Отмена
             </Button>
-            <Button onClick={confirmApply} className="bg-green-500 hover:bg-green-600">
+            <Button
+              onClick={confirmApply}
+              className="bg-green-500 hover:bg-green-600 gap-2"
+              disabled={isGeneratingLetter || coverLetterNoResume}
+            >
+              <Check className="h-4 w-4" />
               Отправить отклик
             </Button>
           </DialogFooter>

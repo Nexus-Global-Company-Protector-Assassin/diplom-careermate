@@ -366,10 +366,19 @@ export function ResumeContent() {
     }
   }, [historyData])
 
+  const [checklistModalOpen, setChecklistModalOpen] = useState(false)
+
   const [checklistItems, setChecklistItems] = useState([
-    { id: "c1", text: "Заголовок профиля оптимизирован", done: true },
-    { id: "c2", text: "Добавьте описание опыта работы", done: false },
-    { id: "c3", text: "Загрузите профессиональное фото", done: false },
+    { id: "c1", text: "Заголовок профиля оптимизирован", done: true, description: "Заголовок должен содержать должность, ключевые навыки и ценность для работодателя", section: "Профиль", difficulty: "Легко" },
+    { id: "c2", text: "Загрузите профессиональное фото", done: false, description: "Профили с фото получают в 14× больше просмотров по сравнению с профилями без фото", section: "Профиль", difficulty: "Легко" },
+    { id: "c3", text: "Добавьте раздел 'About' (о себе)", done: false, description: "Напишите 2-3 предложения о своём вкладе и уникальной ценности для работодателя", section: "Профиль", difficulty: "Средне" },
+    { id: "c4", text: "Укажите ключевые навыки (5-10 шт.)", done: false, description: "Выберите навыки, по которым вас чаще всего ищут рекрутеры. Ссылайтесь на описания вакансий", section: "Профиль", difficulty: "Легко" },
+    { id: "c5", text: "Опишите опыт с результатами и цифрами", done: false, description: "Используйте STAR-фрейм. Пример: 'Увеличил конверсию на 35% за 3 мес. через аб/тесты'", section: "Опыт", difficulty: "Средне" },
+    { id: "c6", text: "Добавьте все места работы с датами", done: false, description: "Отсутствие дат вызывает недоверие. Укажите месяц и год начала и окончания каждой роли", section: "Опыт", difficulty: "Легко" },
+    { id: "c7", text: "Добавьте образование и сертификаты", done: false, description: "Сертификаты повышают доверие и показывают инициативность. Coursera, Google, AWS и другие", section: "Опыт", difficulty: "Средне" },
+    { id: "c8", text: "Попросите 3+ коллег написать рекомендации", done: false, description: "Рекомендации от коллег и руководителей значительно повышают доверие к вашему профилю", section: "Активность", difficulty: "Сложно" },
+    { id: "c9", text: "Включите 'Открыт для предложений'", done: false, description: "Статус Open to Work или 'Поиск работы' даёт вам попасть в поисковые выдачи рекрутеров", section: "Активность", difficulty: "Легко" },
+    { id: "c10", text: "Напишите 1-2 поста в своёй области", done: false, description: "Активные авторы получают больше просмотров и попадают в верх поиска по ключевым словам", section: "Активность", difficulty: "Сложно" },
   ])
 
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
@@ -776,13 +785,116 @@ export function ResumeContent() {
                   </button>
                 ))}
               </div>
-              <Button variant="outline" className="w-full bg-transparent border-border">
+              <Button variant="outline" className="w-full bg-transparent border-border" onClick={() => setChecklistModalOpen(true)}>
                 Открыть чеклист
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* LinkedIn / HH Checklist Modal */}
+      <Dialog open={checklistModalOpen} onOpenChange={setChecklistModalOpen}>
+        <DialogContent className="sm:max-w-[600px] bg-card border-border max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-card-foreground flex items-center gap-2">
+              <Linkedin className="h-5 w-5 text-blue-600" />
+              LinkedIn / HH — Чеклист профиля
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-2 space-y-5">
+            {/* Progress bar */}
+            {(() => {
+              const done = checklistItems.filter(i => i.done).length
+              const total = checklistItems.length
+              const pct = Math.round((done / total) * 100)
+              const getColor = () => pct === 100 ? 'bg-emerald-500' : pct >= 60 ? 'bg-blue-500' : pct >= 30 ? 'bg-amber-500' : 'bg-red-400'
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Выполнено: <strong className="text-card-foreground">{done}/{total}</strong> пунктов</span>
+                    <span className={`font-bold text-lg ${ pct === 100 ? 'text-emerald-500' : pct >= 60 ? 'text-blue-500' : 'text-amber-500' }`}>{pct}%</span>
+                  </div>
+                  <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${getColor()}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  {pct === 100 && (
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span className="text-emerald-700 dark:text-emerald-400 font-medium">Профиль полностью оптимизирован! Рекрутеры вас заметят 🎉</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Grouped sections */}
+            {(['\u041f\u0440\u043e\u0444\u0438\u043b\u044c', '\u041e\u043f\u044b\u0442', '\u0410\u043a\u0442\u0438\u0432\u043d\u043e\u0441\u0442\u044c'] as const).map(section => {
+              const sectionItems = checklistItems.filter(i => i.section === section)
+              const sectionDone = sectionItems.filter(i => i.done).length
+              const sectionEmoji: Record<string, string> = { 'Профиль': '👤', 'Опыт': '💼', 'Активность': '🚀' }
+              return (
+                <div key={section}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-base">{sectionEmoji[section]}</span>
+                    <h3 className="font-semibold text-card-foreground">{section}</h3>
+                    <span className="text-xs text-muted-foreground ml-auto">{sectionDone}/{sectionItems.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {sectionItems.map(item => {
+                      const diffColor: Record<string, string> = {
+                        'Легко': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+                        'Средне': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                        'Сложно': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                      }
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => handleToggleChecklist(item.id)}
+                          className={`w-full text-left flex items-start gap-3 p-3 rounded-lg border transition-all duration-200 ${
+                            item.done
+                              ? 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-900'
+                              : 'bg-background border-border hover:border-blue-300 dark:hover:border-blue-700 hover:bg-muted/50'
+                          }`}
+                        >
+                          <div className={`mt-0.5 shrink-0 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                            item.done ? 'border-emerald-500 bg-emerald-500' : 'border-muted-foreground/40'
+                          }`}>
+                            {item.done && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-sm font-medium ${ item.done ? 'line-through text-muted-foreground' : 'text-card-foreground' }`}>
+                                {item.text}
+                              </span>
+                              <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0 ${diffColor[item.difficulty]}`}>
+                                {item.difficulty}
+                              </span>
+                            </div>
+                            <p className={`text-xs mt-0.5 ${ item.done ? 'text-muted-foreground/60 line-through' : 'text-muted-foreground' }`}>
+                              {item.description}
+                            </p>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChecklistModalOpen(false)} className="bg-transparent border-border">
+              Закрыть
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Upload Modal */}
       <Dialog open={uploadModalOpen} onOpenChange={(open) => {

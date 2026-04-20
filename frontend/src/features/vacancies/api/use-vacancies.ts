@@ -165,6 +165,18 @@ export const useInterviewPrep = () => {
   });
 };
 
+export const useGenerateCoverLetter = () => {
+  return useMutation({
+    mutationFn: ({ vacancyId, resumeId, language }: { vacancyId: string; resumeId?: string; language?: 'ru' | 'en' }) => {
+      const params = new URLSearchParams();
+      if (resumeId && resumeId !== 'all') params.set('resumeId', resumeId);
+      if (language) params.set('language', language);
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      return api.get<{ coverLetter: string } | { noResume: true }>(`/vacancies/${vacancyId}/cover-letter${qs}`);
+    },
+  });
+};
+
 // Legacy aliases
 /** @deprecated use useAdzunaVacancies */
 export const useHhVacancies = (query: string) => useAdzunaVacancies({ query });
