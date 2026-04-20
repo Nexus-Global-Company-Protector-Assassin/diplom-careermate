@@ -4,7 +4,10 @@ import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { AiService } from '../ai/ai.service';
+import { SkillsService } from '../skills/skills.service';
 import { of, throwError } from 'rxjs';
+import { EmbeddingsService } from '../ai/embeddings/embeddings.service';
 
 // ──────────────────────────────── mock data ──────────────────────────────────
 const mockVacancy = {
@@ -53,11 +56,29 @@ const makePrisma = () => ({
     vacancy: {
         findMany: jest.fn(),
         upsert: jest.fn(),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        count: jest.fn().mockResolvedValue(0),
     },
 });
 
 const makeHttp = () => ({
     get: jest.fn(),
+});
+
+const makeAiService = () => ({
+    evaluateVacancyInDepth: jest.fn().mockResolvedValue({ score: 80, grade: 'B' }),
+    generateInterviewPrep: jest.fn().mockResolvedValue({ questions: [] }),
+    generateCoverLetter: jest.fn().mockResolvedValue({ coverLetter: 'mock' }),
+});
+
+const makeSkillsService = () => ({
+    extractFromText: jest.fn().mockResolvedValue([]),
+    syncVacancySkills: jest.fn().mockResolvedValue(undefined),
+});
+
+const makeEmbeddingsService = () => ({
+    indexVacancy: jest.fn().mockResolvedValue(undefined),
+    searchSimilar: jest.fn().mockResolvedValue([]),
 });
 
 const makeConfig = (overrides: Record<string, string> = {}) => ({
@@ -92,6 +113,9 @@ describe('VacanciesService', () => {
                 { provide: PrismaService, useValue: prisma },
                 { provide: HttpService, useValue: http },
                 { provide: ConfigService, useValue: config },
+                { provide: AiService, useValue: makeAiService() },
+                { provide: SkillsService, useValue: makeSkillsService() },
+                { provide: EmbeddingsService, useValue: makeEmbeddingsService() },
             ],
         }).compile();
 
@@ -113,7 +137,7 @@ describe('VacanciesService', () => {
             expect(result).toEqual([mockVacancy]);
             expect(prisma.vacancy.findMany).toHaveBeenCalledWith({
                 where: {},
-                orderBy: { createdAt: 'desc' },
+                orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
                 take: 20,
             });
         });
@@ -125,7 +149,7 @@ describe('VacanciesService', () => {
 
             expect(prisma.vacancy.findMany).toHaveBeenCalledWith({
                 where: { searchQuery: { contains: 'Frontend', mode: 'insensitive' } },
-                orderBy: { createdAt: 'desc' },
+                orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
                 take: 10,
             });
         });
@@ -240,34 +264,33 @@ describe('VacanciesService', () => {
             expect(upsertArg.create.schedule).toBe('Полная занятость');
         });
 
-        it('should fallback to mock when ADZUNA_APP_ID is not set', async () => {
+        it('should throw error when ADZUNA_APP_ID is not set', async () => {
             const noCredsModule = await Test.createTestingModule({
                 providers: [
                     VacanciesService,
                     { provide: PrismaService, useValue: prisma },
                     { provide: HttpService, useValue: http },
                     { provide: ConfigService, useValue: makeConfig({ ADZUNA_APP_ID: '', ADZUNA_APP_KEY: '' }) },
+                    { provide: AiService, useValue: makeAiService() },
+                    { provide: SkillsService, useValue: makeSkillsService() },
+                    { provide: EmbeddingsService, useValue: makeEmbeddingsService() },
                 ],
             }).compile();
 
             const svc = noCredsModule.get<VacanciesService>(VacanciesService);
-            prisma.vacancy.upsert.mockResolvedValue(mockVacancy);
 
-            const result = await svc.searchAndSave('developer', 3);
-
-            // Mock data should be returned, no HTTP calls
+            await expect(svc.searchAndSave('developer', 3)).rejects.toThrow(
+                'Adzuna API credentials are not configured.',
+            );
             expect(http.get).not.toHaveBeenCalled();
-            expect(result.length).toBeGreaterThan(0);
         });
 
-        it('should fallback to mock when Adzuna API returns an error', async () => {
+        it('should throw error when Adzuna API returns an error', async () => {
             http.get.mockReturnValue(throwError(() => ({ message: 'Network Error', response: { status: 503 } })));
-            prisma.vacancy.upsert.mockResolvedValue(mockVacancy);
 
-            const result = await service.searchAndSave('developer', 3);
-
-            // Should not throw, should return mock data
-            expect(result.length).toBeGreaterThan(0);
+            await expect(service.searchAndSave('developer', 3)).rejects.toThrow(
+                'Adzuna API request failed',
+            );
         });
 
         it('should skip vacancy if upsert fails and continue with others', async () => {
