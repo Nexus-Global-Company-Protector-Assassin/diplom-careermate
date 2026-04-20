@@ -37,7 +37,8 @@ const makeConfig = (overrides: Record<string, string> = {}) => ({
     get: jest.fn((key: string) => {
         const defaults: Record<string, string> = {
             PINECONE_API_KEY: 'test-pinecone-key',
-            PINECONE_INDEX: 'test-index',
+            PINECONE_INDEX_NAME: 'test-index',
+            PINECONE_ENVIRONMENT: 'us-west1-gcp',
             LLM_API_KEY: 'test-llm-key',
             LLM_API_BASE_URL: 'https://api.openai.com/v1',
         };
@@ -168,12 +169,12 @@ describe('EmbeddingsService', () => {
             );
         });
 
-        it('should throw when PINECONE_INDEX is not set', async () => {
+        it('should throw when PINECONE_INDEX_NAME is not set', async () => {
             const module = await Test.createTestingModule({
                 providers: [
                     EmbeddingsService,
                     { provide: HttpService, useValue: http },
-                    { provide: ConfigService, useValue: makeConfig({ PINECONE_INDEX: '' }) },
+                    { provide: ConfigService, useValue: makeConfig({ PINECONE_INDEX_NAME: '' }) },
                 ],
             }).compile();
 

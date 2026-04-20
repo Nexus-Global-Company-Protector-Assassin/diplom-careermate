@@ -17,13 +17,15 @@ export class EmbeddingsService {
 
     private getIndex(): ReturnType<Pinecone['index']> {
         const apiKey = this.configService.get<string>('PINECONE_API_KEY');
-        const indexName = this.configService.get<string>('PINECONE_INDEX');
+        const indexName = this.configService.get<string>('PINECONE_INDEX_NAME');
+        const environment = this.configService.get<string>('PINECONE_ENVIRONMENT');
 
         if (!apiKey) throw new Error('Pinecone API key is not configured.');
         if (!indexName) throw new Error('Pinecone index name is not configured.');
+        if (!environment) throw new Error('Pinecone environment is not configured.');
 
         if (!this.pineconeIndex) {
-            const pc = new Pinecone({ apiKey } as any);
+            const pc = new Pinecone({ apiKey, environment });
             this.pineconeIndex = pc.index(indexName);
         }
         return this.pineconeIndex;
@@ -64,8 +66,9 @@ export class EmbeddingsService {
             const vector = await this.getEmbedding(text);
             await index.upsert([{ id, values: vector }]);
             this.logger.debug(`Indexed vacancy ${id} in Pinecone`);
-        } catch (e: any) {
-            this.logger.warn(`Failed to index vacancy ${id}: ${e.message}`);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.warn(`Failed to index vacancy ${id}: ${msg}`);
         }
     }
 
@@ -79,8 +82,9 @@ export class EmbeddingsService {
             const vector = await this.getEmbedding(queryText);
             const results = await index.query({ vector, topK, includeValues: false });
             return (results.matches ?? []).map((m: any) => m.id as string);
-        } catch (e: any) {
-            this.logger.warn(`Semantic search failed: ${e.message}`);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.warn(`Semantic search failed: ${msg}`);
             return [];
         }
     }
