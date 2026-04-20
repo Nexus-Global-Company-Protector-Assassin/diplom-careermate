@@ -395,9 +395,10 @@ export class VacanciesService {
                 dbVacancies.push(...extra);
             }
 
-            // Normalize position → score: rank 0 = 1.0, last rank ≈ 0
+            // Normalize position → score: rank 0 = 1.0, last rank = 0.0
             semanticIds.forEach((id, idx) => {
-                semanticRank.set(id, 1 - idx / Math.max(semanticIds.length, 1));
+                const n = semanticIds.length;
+                semanticRank.set(id, n === 1 ? 1.0 : 1 - idx / (n - 1));
             });
         } catch (e: any) {
             this.logger.warn(`[Semantic] Search failed, using keyword-only: ${e.message}`);
