@@ -51,8 +51,6 @@ describe('EmbeddingsService', () => {
     let http: ReturnType<typeof makeHttp>;
 
     beforeEach(async () => {
-        jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
-        jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => {});
         jest.clearAllMocks();
 
         // Restore default implementations after clearAllMocks
@@ -63,6 +61,9 @@ describe('EmbeddingsService', () => {
                 { id: 'vacancy-2', score: 0.82 },
             ],
         });
+
+        jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+        jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => {});
 
         http = makeHttp();
 
