@@ -70,12 +70,13 @@ model Resume {
   profileId String
   profile   Profile  @relation(fields: [profileId], references: [id])
   title     String   @default("Мое резюме")
-  subtitle  String?  
+  subtitle  String?
   content   String   // Markdown or HTML content
   status    String   @default("draft") // draft, active, archived
   type      String   @default("resume") // resume, cover_letter, ai_improved
   version   Int      @default(1)
   reviewData Json?   // Full AI review result (score, strengths, weaknesses, improved resume)
+  fileKey    String?  // S3/MinIO object key for the original uploaded file
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
