@@ -35,7 +35,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { CoverLetterGenerator } from "@/features/resume/cover-letter-generator"
 import { useResumesHistory, useSaveResume, useDeleteResume } from "./api/use-resumes"
 import { useUploadResume } from "@/features/profile/api/use-upload-resume"
-import { useReviewResume, type ResumeReviewResult } from "./api/use-review-resume"
+import { useReviewResume, useStoreResumeFile, type ResumeReviewResult } from "./api/use-review-resume"
 import { useGenerateQuestions, useGenerateResume, type ResumeQuestion, type QuestionAnswer } from "./api/use-create-resume"
 import { useProfile } from "@/features/profile/api/use-profile"
 import { Textarea } from "@/shared/ui/textarea"
@@ -269,6 +269,7 @@ export function ResumeContent() {
   const { mutate: deleteResume } = useDeleteResume()
   const { mutate: uploadToAgent, isPending: isParsing } = useUploadResume()
   const { mutate: reviewResume, isPending: isReviewing } = useReviewResume()
+  const { mutate: storeFile } = useStoreResumeFile()
   const { data: profileData } = useProfile()
   const { mutate: generateQuestions, isPending: isGeneratingQuestions } = useGenerateQuestions()
   const { mutate: generateResume, isPending: isGeneratingResume } = useGenerateResume()
@@ -444,6 +445,11 @@ export function ResumeContent() {
         onSuccess: (result) => {
           setAnalysisStep('saving')
           setReviewResult(result)
+          // Persist original file to MinIO/S3 (fire-and-forget, non-blocking)
+          storeFile(
+            { file: uploadedFile, title: resumeTitle },
+            { onError: (e) => console.warn('[StoreFile] MinIO upload failed (non-blocking):', e) },
+          )
 
           // Auto-save the resume with reviewData immediately to DB
           const content = `Анализ резюме от AI Агента:\n\nОценка: ${result.overallScore}/10 — ${result.overallVerdict}\n\nФИО: ${result.extractedProfile.fullName}\nДолжность: ${result.extractedProfile.currentPosition || 'Не указана'}\nОпыт: ${result.extractedProfile.experienceYears} лет\nНавыки: ${result.extractedProfile.skills.join(', ')}`
