@@ -1,11 +1,10 @@
 import {
     Controller, Get, Post, Body, Delete, Param,
-    UseInterceptors, UploadedFile, Query, Res, ParseFilePipe,
-    MaxFileSizeValidator, FileTypeValidator,
+    UseInterceptors, UploadedFile, Query, ParseFilePipe,
+    MaxFileSizeValidator, FileTypeValidator, Redirect,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
-import { Response } from 'express';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { ResumesService } from './resumes.service';
 
 @ApiTags('Resumes')
@@ -34,16 +33,17 @@ export class ResumesController {
             type: 'object',
             properties: {
                 file: { type: 'string', format: 'binary' },
-                title: { type: 'string' },
             },
         },
     })
+    @ApiQuery({ name: 'title', required: false, description: 'Display name for the resume' })
     @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
     async uploadResume(
         @UploadedFile(new ParseFilePipe({
             validators: [
                 new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
-                new FileTypeValidator({ fileType: /(pdf|msword|vnd\.openxmlformats)/ }),
+                // Covers application/pdf, application/msword (.doc), application/vnd.openxmlformats (.docx), application/x-cfb (legacy .doc magic bytes)
+                new FileTypeValidator({ fileType: /(pdf|msword|vnd\.openxmlformats|x-cfb)/ }),
             ],
             fileIsRequired: true,
         })) file: Express.Multer.File,
@@ -53,10 +53,11 @@ export class ResumesController {
     }
 
     @Get(':id/file')
-    @ApiOperation({ summary: 'Get presigned download URL for original uploaded file' })
-    async getDownloadUrl(@Param('id') id: string, @Res() res: Response) {
+    @ApiOperation({ summary: 'Redirect to presigned download URL for original uploaded file' })
+    @Redirect()
+    async getDownloadUrl(@Param('id') id: string) {
         const url = await this.resumesService.getDownloadUrl(id);
-        res.redirect(url);
+        return { url, statusCode: 302 };
     }
 
     @Post()

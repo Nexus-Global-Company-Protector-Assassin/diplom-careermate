@@ -50,10 +50,9 @@ describe('ResumesController', () => {
         expect(result.fileKey).toBe('resumes/p/r2.pdf');
     });
 
-    it('getDownloadUrl should redirect to presigned URL', async () => {
-        const res = { redirect: jest.fn() } as any;
-        await controller.getDownloadUrl('r2', res);
+    it('getDownloadUrl should return redirect object with presigned URL', async () => {
+        const result = await controller.getDownloadUrl('r2');
         expect(service.getDownloadUrl).toHaveBeenCalledWith('r2');
-        expect(res.redirect).toHaveBeenCalledWith('https://minio/bucket/key?sig=abc');
+        expect(result).toEqual({ url: 'https://minio/bucket/key?sig=abc', statusCode: 302 });
     });
 });
