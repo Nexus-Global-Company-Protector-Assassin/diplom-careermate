@@ -432,6 +432,8 @@ export function ResumeContent() {
 
   const handleUpload = () => {
     if (!uploadedFile || !resumeTitle) return
+    const file = uploadedFile  // capture after null-guard for type-safe closure
+    const title = resumeTitle
 
     setAnalysisStep('uploading')
 
@@ -440,14 +442,14 @@ export function ResumeContent() {
     setTimeout(() => setAnalysisStep('analyzing'), 2000)
 
     reviewResume(
-      { file: uploadedFile },
+      { file },
       {
         onSuccess: (result) => {
           setAnalysisStep('saving')
           setReviewResult(result)
           // Persist original file to MinIO/S3 (fire-and-forget, non-blocking)
           storeFile(
-            { file: uploadedFile, title: resumeTitle },
+            { file, title },
             { onError: (e) => console.warn('[StoreFile] MinIO upload failed (non-blocking):', e) },
           )
 
@@ -455,8 +457,8 @@ export function ResumeContent() {
           const content = `Анализ резюме от AI Агента:\n\nОценка: ${result.overallScore}/10 — ${result.overallVerdict}\n\nФИО: ${result.extractedProfile.fullName}\nДолжность: ${result.extractedProfile.currentPosition || 'Не указана'}\nОпыт: ${result.extractedProfile.experienceYears} лет\nНавыки: ${result.extractedProfile.skills.join(', ')}`
 
           saveResume({
-            title: resumeTitle,
-            subtitle: `Файл: ${uploadedFile.name}`,
+            title,
+            subtitle: `Файл: ${file.name}`,
             type: 'uploaded_file',
             content,
             reviewData: result,
@@ -481,8 +483,9 @@ export function ResumeContent() {
           setAnalysisStep('parsing')
 
           // Fallback: use old simple parsing
-          uploadToAgent(uploadedFile, {
+          uploadToAgent(file, {
             onSuccess: (parsedData) => {
+              storeFile({ file, title }, { onError: (e) => console.warn('[StoreFile] fallback MinIO upload failed:', e) })
               setAnalysisStep('saving')
               let formattedContent = `Анализ резюме от AI Агента:\n\n`
               if (parsedData.fullName) formattedContent += `ФИО: ${parsedData.fullName}\n`
@@ -517,8 +520,8 @@ export function ResumeContent() {
               }
 
               saveResume({
-                title: resumeTitle,
-                subtitle: `Файл: ${uploadedFile.name}`,
+                title,
+                subtitle: `Файл: ${file.name}`,
                 type: 'uploaded_file',
                 content: formattedContent,
                 reviewData: basicReviewData,
@@ -535,8 +538,8 @@ export function ResumeContent() {
               console.error('[UploadToAgent] Simple parse also failed:', parseError)
               setAnalysisStep('saving')
               saveResume({
-                title: resumeTitle,
-                subtitle: `Файл: ${uploadedFile.name}`,
+                title,
+                subtitle: `Файл: ${file.name}`,
                 type: 'uploaded_file',
                 content: `[Ошибка: Не удалось распознать документ AI Агентом. Файл загружен без анализа.]`
               }, {
