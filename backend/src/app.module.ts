@@ -15,24 +15,17 @@ import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './modules/redis/redis.module';
+import { StorageModule } from './modules/storage/storage.module';
 
 @Module({
     imports: [
-        ConfigModule.forRoot({
-            isGlobal: true,
-            envFilePath: ['.env'],
-        }),
-        // Rate limiting: 100 req/min globally
-        ThrottlerModule.forRoot([
-            {
-                ttl: 60000, // 1 minute in ms
-                limit: 100,
-            },
-        ]),
+        ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env'] }),
+        ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
         DatabaseModule,
         AuthModule,
         UsersModule,
         RedisModule,
+        StorageModule,
         ProfilesModule,
         PocModule,
         VacanciesModule,
@@ -45,5 +38,5 @@ import { RedisModule } from './modules/redis/redis.module';
     controllers: [HealthController, AppController],
     providers: [],
 })
-export class AppModule { }
+export class AppModule {}
 
