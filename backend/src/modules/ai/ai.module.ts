@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
-import { HttpModule } from '@nestjs/axios';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { DatabaseModule } from '../../database/database.module';
+import { LlmProviderService } from './providers/llm-provider.service';
 
 @Module({
-    imports: [HttpModule, DatabaseModule],
+    imports: [DatabaseModule],
     controllers: [AiController],
-    providers: [AiService],
+    providers: [AiService, LlmProviderService],
     exports: [AiService],
 })
-export class AiModule { }
+export class AiModule {}
