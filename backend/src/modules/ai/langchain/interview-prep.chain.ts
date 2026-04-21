@@ -11,7 +11,7 @@ export class InterviewPrepChain {
     private readonly chain;
 
     constructor(llm: ChatOpenAI) {
-        this.chain = (llm as any).pipe(new JsonOutputParser()).pipe(interviewPrepPrompt as any);
+        this.chain = interviewPrepPrompt.pipe(llm as any).pipe(new JsonOutputParser() as any);
     }
 
     async invoke(input: { prompt: string }): Promise<any> {

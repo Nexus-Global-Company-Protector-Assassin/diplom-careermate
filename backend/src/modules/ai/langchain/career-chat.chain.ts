@@ -13,9 +13,7 @@ export class CareerChatChain {
     private readonly chain;
 
     constructor(llm: ChatOpenAI) {
-        // Build LCEL chain: prompt → llm → parser
-        // Using llm.pipe() so the chain is composable and unit-testable via mock injection
-        this.chain = (llm as any).pipe(new StringOutputParser()).pipe(careerChatPrompt as any);
+        this.chain = careerChatPrompt.pipe(llm as any).pipe(new StringOutputParser() as any);
     }
 
     async invoke(input: { message: string; context: string }): Promise<string> {

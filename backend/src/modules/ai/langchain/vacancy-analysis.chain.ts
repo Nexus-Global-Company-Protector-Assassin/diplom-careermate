@@ -11,7 +11,7 @@ export class VacancyAnalysisChain {
     private readonly chain;
 
     constructor(llm: ChatOpenAI) {
-        this.chain = (llm as any).pipe(new JsonOutputParser()).pipe(vacancyAnalysisPrompt as any);
+        this.chain = vacancyAnalysisPrompt.pipe(llm as any).pipe(new JsonOutputParser() as any);
     }
 
     async invoke(input: { prompt: string }): Promise<any> {

@@ -11,7 +11,7 @@ export class CoverLetterChain {
     private readonly chain;
 
     constructor(llm: ChatOpenAI) {
-        this.chain = (llm as any).pipe(new StringOutputParser()).pipe(coverLetterPrompt as any);
+        this.chain = coverLetterPrompt.pipe(llm as any).pipe(new StringOutputParser() as any);
     }
 
     async invoke(input: { systemPrompt: string; prompt: string }): Promise<string> {
