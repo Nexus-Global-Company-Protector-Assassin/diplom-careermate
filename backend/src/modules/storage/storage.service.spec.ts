@@ -16,6 +16,7 @@ describe('StorageService', () => {
     let service: StorageService;
 
     beforeEach(async () => {
+        mockSend.mockClear();
         mockSend.mockResolvedValue({});
         const module: TestingModule = await Test.createTestingModule({
             providers: [
