@@ -36,7 +36,7 @@ export class ResumesService {
             subtitle: r.subtitle || '',
             content: r.content,
             reviewData: r.reviewData || null,
-            fileKey: (r as any).fileKey || null,
+            fileKey: r.fileKey || null,
             updated: r.updatedAt.toLocaleDateString("ru-RU"),
             status: r.status === 'active' ? 'Активное' : r.status === 'draft' ? 'Черновик' : 'Устаревшее',
             statusColor: r.status === 'active'
@@ -114,11 +114,10 @@ ${email} | ${phone}`;
         });
     }
 
-    async uploadResumeFile(file: Express.Multer.File, title: string): Promise<any> {
+    async uploadResumeFile(file: Express.Multer.File, title: string) {
         const profileId = await this.getProfileId();
         const ext = file.originalname.split('.').pop() || 'pdf';
-        const tempId = `${Date.now()}`;
-        const key = `resumes/${profileId}/${tempId}.${ext}`;
+        const key = `resumes/${profileId}/${crypto.randomUUID()}.${ext}`;
 
         await this.storage.uploadFile(file.buffer, key, file.mimetype || 'application/octet-stream');
 
@@ -131,7 +130,7 @@ ${email} | ${phone}`;
                 type: 'uploaded_file',
                 status: 'draft',
                 fileKey: key,
-            } as any,
+            },
         });
     }
 
@@ -145,12 +144,11 @@ ${email} | ${phone}`;
             throw new NotFoundException('Резюме не найдено');
         }
 
-        const fileKey = (resume as any).fileKey;
-        if (!fileKey) {
+        if (!resume.fileKey) {
             throw new NotFoundException('Файл не прикреплён к этому резюме');
         }
 
-        return this.storage.getPresignedDownloadUrl(fileKey);
+        return this.storage.getPresignedDownloadUrl(resume.fileKey);
     }
 
     async deleteResume(id: string) {
