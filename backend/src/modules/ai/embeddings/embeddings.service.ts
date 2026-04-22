@@ -85,7 +85,9 @@ export class EmbeddingsService implements OnModuleInit {
         const vectorStore = this.getVectorStore();
         try {
             const results = await vectorStore.similaritySearch(queryText, topK);
-            return results.map((doc) => doc.metadata.vacancyId as string);
+            return results
+                .map((doc) => doc.metadata.vacancyId)
+                .filter((id): id is string => typeof id === 'string');
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.warn(`Semantic search failed: ${msg}`);
