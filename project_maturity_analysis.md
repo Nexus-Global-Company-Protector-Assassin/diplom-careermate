@@ -72,7 +72,7 @@
 - [x] **13. Company Research — не реализован**
 `interviews/company-research/` пустая папка. Функция "исследование компании перед интервью" анонсирована в UI, но на бэке нет.
 
-**14. Question Generator — не реализован**
+- [x] **14. Question Generator — не реализован**
 `interviews/question-gen/` пустая папка. Вопросы генерируются напрямую через `generateInterviewPrep()` в `ai.service.ts`, без отдельного модуля.
 
 - [x] **15. Skills Analysis — не реализован**

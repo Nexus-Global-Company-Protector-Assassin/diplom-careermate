@@ -5,9 +5,10 @@ import { VacanciesController } from './vacancies.controller';
 import { DatabaseModule } from '../../database/database.module';
 import { AiModule } from '../ai/ai.module';
 import { SkillsModule } from '../skills/skills.module';
+import { QuestionGenModule } from '../interviews/question-gen/question-gen.module';
 
 @Module({
-    imports: [DatabaseModule, HttpModule, AiModule, SkillsModule],
+    imports: [DatabaseModule, HttpModule, AiModule, SkillsModule, QuestionGenModule],
     controllers: [VacanciesController],
     providers: [VacanciesService],
     exports: [VacanciesService],
