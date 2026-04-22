@@ -10,6 +10,10 @@ describe('VacanciesController', () => {
         const mockService = {
             getVacancies: jest.fn().mockResolvedValue([{ id: 'v1' }]),
             searchAndSave: jest.fn().mockResolvedValue([{ id: 'v2' }]),
+            getRecommendedForProfile: jest.fn().mockResolvedValue([]),
+            interviewPrep: jest.fn().mockResolvedValue({ questions: [] }),
+            evaluateVacancy: jest.fn().mockResolvedValue({ score: 80 }),
+            generateCoverLetter: jest.fn().mockResolvedValue({ coverLetter: 'test' }),
         };
 
         const module: TestingModule = await Test.createTestingModule({
@@ -30,10 +34,19 @@ describe('VacanciesController', () => {
         expect(controller).toBeDefined();
     });
 
-    it('should return vacancies from getVacancies', async () => {
+    it('should call getVacancies with filters object', async () => {
         const result = await controller.getVacancies('test', '10');
-        expect(service.getVacancies).toHaveBeenCalledWith('test', 10);
+        expect(service.getVacancies).toHaveBeenCalledWith(
+            expect.objectContaining({ query: 'test', limit: 10 }),
+        );
         expect(result).toEqual([{ id: 'v1' }]);
+    });
+
+    it('should use default limit 20 when not provided', async () => {
+        await controller.getVacancies();
+        expect(service.getVacancies).toHaveBeenCalledWith(
+            expect.objectContaining({ limit: 20 }),
+        );
     });
 
     it('should call searchAndSave on POST /search', async () => {
@@ -42,22 +55,27 @@ describe('VacanciesController', () => {
         expect(result).toEqual([{ id: 'v2' }]);
     });
 
-    it('should return recommended (stub)', () => {
-        const result = controller.getRecommended();
+    it('should use default count 10 when not provided in searchAndSave', async () => {
+        await controller.searchAndSave({ query: 'dev' });
+        expect(service.searchAndSave).toHaveBeenCalledWith('dev', 10);
+    });
+
+    it('should return recommended vacancies as array', async () => {
+        const result = await controller.getRecommended();
         expect(Array.isArray(result)).toBe(true);
     });
 
-    it('should return responses (stub)', () => {
+    it('should return responses as empty array (stub)', () => {
         const result = controller.getResponses();
         expect(Array.isArray(result)).toBe(true);
     });
 
-    it('should mock applyToVacancy', () => {
+    it('should return success on applyToVacancy', () => {
         const result = controller.applyToVacancy({ vacancyId: '123' });
         expect(result).toHaveProperty('success', true);
     });
 
-    it('should mock toggleFavorite', () => {
+    it('should return isFavorite on toggleFavorite', () => {
         const result = controller.toggleFavorite({ vacancyId: '123', isFavorite: true });
         expect(result).toHaveProperty('isFavorite', true);
     });

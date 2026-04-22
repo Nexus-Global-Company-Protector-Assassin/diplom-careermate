@@ -9,7 +9,7 @@ describe('AiController', () => {
 
     beforeEach(async () => {
         const mockService = {
-            generateResponse: jest.fn().mockReturnValue('mock response'),
+            generateResponse: jest.fn().mockResolvedValue('mock response'),
         };
 
         const module: TestingModule = await Test.createTestingModule({
