@@ -26,20 +26,26 @@ export class PolzaAiEmbeddings extends Embeddings {
             'openai/text-embedding-3-small',
         );
 
-        const response = await firstValueFrom(
-            this.httpService.post(
-                `${baseUrl}/embeddings`,
-                { model, input: text.slice(0, 8000) },
-                {
-                    headers: {
-                        Authorization: `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json',
+        const response = await this.caller.call(() =>
+            firstValueFrom(
+                this.httpService.post(
+                    `${baseUrl}/embeddings`,
+                    { model, input: text.slice(0, 8000) },
+                    {
+                        headers: {
+                            Authorization: `Bearer ${apiKey}`,
+                            'Content-Type': 'application/json',
+                        },
                     },
-                },
+                ),
             ),
         );
 
-        return response.data.data[0].embedding as number[];
+        const embedding = response.data?.data?.[0]?.embedding;
+        if (!Array.isArray(embedding)) {
+            throw new Error(`Unexpected embeddings response shape: ${JSON.stringify(response.data)}`);
+        }
+        return embedding as number[];
     }
 
     async embedDocuments(texts: string[]): Promise<number[][]> {
