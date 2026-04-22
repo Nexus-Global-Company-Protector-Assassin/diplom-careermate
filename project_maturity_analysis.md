@@ -57,22 +57,57 @@
 
 ### 🟠 Серьёзные (мешают MVP)
 
-**9. Нет реальных тестов**
+- [x] **9. Нет реальных тестов**
 Тестовые папки (`backend/test/e2e`, `unit`, `integration`, `frontend/tests/e2e`, `unit`, `integration`) — все пустые. `.spec.ts` файлы есть, но по содержимому это автоматически сгенерированные заглушки от NestJS CLI. CI пайплайн описан корректно, но запускать нечего.
 
 **10. Queue/Bull — не реализован**
 `queue/processors/` пустая папка. Bull установлен как зависимость. Ни одного processor'а нет. Все AI-запросы — синхронные, пользователь ждёт ответа в HTTP-соединении до 10-30 секунд.
 
-**11. Embeddings/Vector Search — не реализован**
+- [x] **11. Embeddings/Vector Search — не реализован**
 `ai/embeddings/` пустая папка. Pinecone установлен как зависимость. Semantic search / RAG для резюме не реализован.
+Что реализовано:
+- EmbeddingsService — Pinecone upsert + OpenAI text-embedding-3-small, с правильной обработкой ошибок (config ошибки пробрасываются, runtime ошибки логируются)
+- EmbeddingsModule — подключён в VacanciesModule
+- searchAndSave — индексирует каждую вакансию в Pinecone асинхронно (fire-and-forget) после сохранения в Postgres
+- getRecommendedForProfile — гибридный скоринг 60% calcMatch + 40% Pinecone cosine similarity с graceful fallback на keyword-only при ошибке
+- 14 тест-суит, 105 тестов — все зелёные
 
-**12. Storage (MinIO/S3) — не реализован**
+● PINECONE_API_KEY — берётся из https://app.pinecone.io:
+  1. Зарегистрироваться / войти
+  2. В боковом меню → API Keys → скопировать ключ
+
+Хорошая новость: твой .env уже содержит все три переменные — код-ревьюер их нашёл при фиксе:
+  PINECONE_API_KEY=<уже есть>
+  PINECONE_ENVIRONMENT=us-west1-gcp
+  PINECONE_INDEX_NAME=careermate-vectors
+(Я ошибся в summary — правильное имя careermate-vectors, а не careermate-vacancies)
+
+Что ещё нужно сделать вручную — создать индекс в Pinecone console:
+  1. Войти на app.pinecone.io → Create Index
+  2. Name: careermate-vectors
+  3. Dimensions: 1536 (размерность text-embedding-3-small)
+  4. Metric: Cosine
+  5. Environment выбрать соответствующее (у тебя us-west1-gcp)
+
+После создания индекса семантический поиск заработает при наличии LLM_API_KEY для OpenAI embeddings.
+
+
+- [x] **12. Storage (MinIO/S3) — не реализован**
 `storage/providers/` пустая папка. AWS SDK установлен. Загрузка PDF-резюме не работает через S3 — файлы, судя по коду, просто сохраняются как текст в Postgres-поле `content`. При загрузке файла юзером — только название сохраняется.
+  Что было сделано:
+  - StorageService + StorageModule — MinIO/S3 через @aws-sdk/client-s3, auto-detect MinIO vs real S3
+  - Prisma-миграция — fileKey String? в модели Resume
+  - POST /resumes/upload — multipart → MinIO → DB запись с fileKey
+  - GET /resumes/:id/file — presigned URL redirect (302)
+  - Фронтенд — useStoreResumeFile hook, файл сохраняется в MinIO параллельно с AI-анализом во всех ветках загрузки
+  - 107/107 тестов, TypeScript без ошибок
+  Когда запустишь Docker Desktop — применить миграцию командой:
+  cd backend && npx prisma migrate dev
 
 - [x] **13. Company Research — не реализован**
 `interviews/company-research/` пустая папка. Функция "исследование компании перед интервью" анонсирована в UI, но на бэке нет.
 
-**14. Question Generator — не реализован**
+- [x andrey] **14. Question Generator — не реализован**
 `interviews/question-gen/` пустая папка. Вопросы генерируются напрямую через `generateInterviewPrep()` в `ai.service.ts`, без отдельного модуля.
 
 - [x] **15. Skills Analysis — не реализован**
@@ -81,10 +116,27 @@
 **16. Career Paths — не реализован**
 `profiles/career-paths/` пустая папка. Персональный карьерный трекинг отсутствует.
 
-**17. LangChain/Agent интеграция — заглушка**
+- [x] **17. LangChain/Agent интеграция — заглушка**
 `ai/langchain/` и `ai/providers/` — пустые. Несмотря на то что LangChain и Pinecone установлены как зависимости, AI-сервис просто делает прямой `httpService.post()` к OpenAI-совместимому API. Никаких chains, tools или agents нет.
+  До:
+  - ai/langchain/ — пустая папка
+  - ai/providers/ — пустая папка    
+  - AI-сервис делал прямой httpService.post() к OpenAI API вручную        
+  После:
+  - ai/providers/llm-provider.service.ts — NestJS-сервис, оборачивающий ChatOpenAI из LangChain с lazy init и auto-detect по LLM_API_KEY
+  - ai/langchain/career-chat.chain.ts — LCEL pipeline: ChatPromptTemplate → ChatOpenAI → StringOutputParser
+  - ai/langchain/vacancy-analysis.chain.ts — LCEL pipeline: ChatPromptTemplate → ChatOpenAI → JsonOutputParser
+  - ai/langchain/interview-prep.chain.ts — LCEL pipeline для STAR+R
+  - ai/langchain/cover-letter.chain.ts — LCEL pipeline для cover letter
+  - AiService — больше нет httpService, все методы делегируют в chains
 
----
+  Это закрывает формулировку "никаких chains нет" — теперь есть реальные LangChain chains через LCEL (.pipe() паттерн) с ChatPromptTemplate, StringOutputParser, JsonOutputParser.
+
+  Tools и Agents (ReAct агент, tool calling) — это отдельная и значительно большая фича. Для диплома это скорее уровень "bonus" поверх уже реализованного. Хочешь добавить?
+
+
+
+---11 12 17 24 26 
 
 ### 🟡 Важные для продукта
 
@@ -106,8 +158,8 @@
 **23. HH.ru парсер — не интегрирован в основной стек**
 `data-parsers/hh_parser/` — standalone Python-скрипт (`server.py`, `requirements.txt`). Никак не связан с основным приложением. Adzuna API используется, а HH.ru нет.
 
-**24. DevOps — Terraform и Monitoring пустые**
-`devops/terraform/` пустая папка. `devops/monitoring/` пустая папка. `deploy.sh` ссылается на `devops/docker/docker-compose.prod.yml` которого нет в репозитории.
+- [x] **24. DevOps — Terraform и Monitoring пустые**
+`devops/terraform/` — полный AWS IaC (VPC, EC2, RDS, ElastiCache, S3, IAM, SGs). `devops/monitoring/` — Prometheus + Grafana + Alertmanager stack с 10 alert rules и 12-panel dashboard. `backend/src/modules/metrics/` — кастомный Prometheus endpoint (без внешних зависимостей).
 
 - [x] **25. Нет логирования в structured format**
 `nest-winston` и `winston` установлены. В коде везде используется встроенный `Logger` от NestJS. Winston не настроен — нет JSON логов, нет отправки в centralized logging.
