@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { ProfilesService } from './profiles.service';
 import { PrismaService } from '../../database/prisma.service';
+import { SkillsService } from '../skills/skills.service';
 
 // ─────────────────────────────────── helpers ─────────────────────────────────
 const USER_ID = 'user-uuid-123';
@@ -52,6 +53,7 @@ describe('ProfilesService', () => {
             providers: [
                 ProfilesService,
                 { provide: PrismaService, useValue: prisma },
+                { provide: SkillsService, useValue: { syncProfileSkills: jest.fn().mockResolvedValue(undefined) } },
             ],
         }).compile();
 
@@ -75,6 +77,9 @@ describe('ProfilesService', () => {
                     analysisResults: {
                         orderBy: { createdAt: 'desc' },
                         take: 1,
+                    },
+                    profileSkills: {
+                        include: { skill: true },
                     },
                 },
             });

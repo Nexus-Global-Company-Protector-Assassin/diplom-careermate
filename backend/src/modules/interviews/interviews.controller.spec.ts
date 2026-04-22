@@ -31,17 +31,20 @@ describe('InterviewsController', () => {
         expect(controller).toBeDefined();
     });
 
-    it('should return interviews array', () => {
-        expect(controller.getAll()).toEqual([{ id: '1' }]);
+    it('should return interviews array', async () => {
+        const result = await controller.getAll();
+        expect(result).toEqual([{ id: '1' }]);
     });
 
-    it('should create interview', () => {
+    it('should create interview', async () => {
         const body = { company: '1', position: '2', date: '3', time: '4' };
-        expect(controller.create(body)).toEqual({ id: '2', ...body });
+        const result = await controller.create(body);
+        expect(result).toEqual({ id: '2', ...body });
     });
 
-    it('should update status', () => {
+    it('should update status', async () => {
         const body = { status: 'rejected' };
-        expect(controller.updateStatus('123', body)).toEqual({ success: true, id: '123', status: 'rejected' });
+        const result = await controller.updateStatus('123', body);
+        expect(result).toEqual({ success: true, id: '123', status: 'rejected' });
     });
 });

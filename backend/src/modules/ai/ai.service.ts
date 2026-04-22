@@ -196,6 +196,7 @@ ${vacancyText}
         }
     }
 
+
     async generateCoverLetter(vacancy: any, resumeContent: string, language: 'ru' | 'en' = 'ru'): Promise<{ coverLetter: string }> {
         const llm = this.llmProvider.chat;
         const isEn = language === 'en';

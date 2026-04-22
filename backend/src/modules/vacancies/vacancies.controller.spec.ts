@@ -10,6 +10,7 @@ describe('VacanciesController', () => {
         const mockService = {
             getVacancies: jest.fn().mockResolvedValue([{ id: 'v1' }]),
             searchAndSave: jest.fn().mockResolvedValue([{ id: 'v2' }]),
+            getRecommendedForProfile: jest.fn().mockResolvedValue([]),
         };
 
         const module: TestingModule = await Test.createTestingModule({
@@ -32,7 +33,7 @@ describe('VacanciesController', () => {
 
     it('should return vacancies from getVacancies', async () => {
         const result = await controller.getVacancies('test', '10');
-        expect(service.getVacancies).toHaveBeenCalledWith('test', 10);
+        expect(service.getVacancies).toHaveBeenCalledWith(expect.objectContaining({ query: 'test', limit: 10 }));
         expect(result).toEqual([{ id: 'v1' }]);
     });
 
@@ -42,8 +43,8 @@ describe('VacanciesController', () => {
         expect(result).toEqual([{ id: 'v2' }]);
     });
 
-    it('should return recommended (stub)', () => {
-        const result = controller.getRecommended();
+    it('should return recommended (stub)', async () => {
+        const result = await controller.getRecommended();
         expect(Array.isArray(result)).toBe(true);
     });
 

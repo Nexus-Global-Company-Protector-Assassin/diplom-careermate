@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { AiService } from '../ai/ai.service';
 import { SkillsService } from '../skills/skills.service';
 import { EmbeddingsService } from '../ai/embeddings/embeddings.service';
+import { QuestionGenService } from '../interviews/question-gen/question-gen.service';
 
 // Adzuna API base URL
 const ADZUNA_API = 'https://api.adzuna.com/v1/api/jobs';
@@ -286,6 +287,7 @@ export class VacanciesService {
         private readonly aiService: AiService,
         private readonly skillsService: SkillsService,
         private readonly embeddingsService: EmbeddingsService,
+        private readonly questionGenService: QuestionGenService,
     ) { }
 
     /**
@@ -701,7 +703,7 @@ export class VacanciesService {
             return { noResume: true };
         }
 
-        return this.aiService.generateInterviewPrep(vacancy, resume.content);
+        return this.questionGenService.generateForVacancy(vacancy, resume.content);
     }
 
     /**
@@ -735,4 +737,3 @@ export class VacanciesService {
         return this.aiService.generateCoverLetter(vacancy, resume.content, language);
     }
 }
-

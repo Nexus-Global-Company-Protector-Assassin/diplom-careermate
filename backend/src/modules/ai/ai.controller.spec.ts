@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 
@@ -19,7 +20,10 @@ describe('AiController', () => {
                     useValue: mockService,
                 },
             ],
-        }).compile();
+        })
+            .overrideGuard(ThrottlerGuard)
+            .useValue({ canActivate: () => true })
+            .compile();
 
         controller = module.get<AiController>(AiController);
         service = module.get<AiService>(AiService);
@@ -29,9 +33,9 @@ describe('AiController', () => {
         expect(controller).toBeDefined();
     });
 
-    it('should call service and return response', () => {
+    it('should call service and return response', async () => {
         const body = { message: 'hello' };
-        const result = controller.chat(body);
+        const result = await controller.chat(body);
 
         expect(service.generateResponse).toHaveBeenCalledWith('hello');
         expect(result).toEqual({ response: 'mock response' });

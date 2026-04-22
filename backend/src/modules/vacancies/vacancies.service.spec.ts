@@ -8,6 +8,7 @@ import { AiService } from '../ai/ai.service';
 import { SkillsService } from '../skills/skills.service';
 import { of, throwError } from 'rxjs';
 import { EmbeddingsService } from '../ai/embeddings/embeddings.service';
+import { QuestionGenService } from '../interviews/question-gen/question-gen.service';
 
 // ──────────────────────────────── mock data ──────────────────────────────────
 const mockVacancy = {
@@ -81,6 +82,10 @@ const makeEmbeddingsService = () => ({
     searchSimilar: jest.fn().mockResolvedValue([]),
 });
 
+const makeQuestionGenService = () => ({
+    generateForVacancy: jest.fn().mockResolvedValue({ questions: [], candidate_questions: [], tips: '' }),
+});
+
 const makeConfig = (overrides: Record<string, string> = {}) => ({
     get: jest.fn((key: string) => {
         const defaults: Record<string, string> = {
@@ -116,6 +121,7 @@ describe('VacanciesService', () => {
                 { provide: AiService, useValue: makeAiService() },
                 { provide: SkillsService, useValue: makeSkillsService() },
                 { provide: EmbeddingsService, useValue: makeEmbeddingsService() },
+                { provide: QuestionGenService, useValue: makeQuestionGenService() },
             ],
         }).compile();
 
@@ -274,6 +280,7 @@ describe('VacanciesService', () => {
                     { provide: AiService, useValue: makeAiService() },
                     { provide: SkillsService, useValue: makeSkillsService() },
                     { provide: EmbeddingsService, useValue: makeEmbeddingsService() },
+                    { provide: QuestionGenService, useValue: makeQuestionGenService() },
                 ],
             }).compile();
 
