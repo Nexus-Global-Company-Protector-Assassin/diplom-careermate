@@ -1,0 +1,36 @@
+# Copy to terraform.tfvars and fill in real values
+# NEVER commit terraform.tfvars — it contains secrets
+
+aws_region  = "eu-central-1"
+environment = "production"
+app_name    = "careermate"
+
+# VPC
+vpc_cidr           = "10.0.0.0/16"
+availability_zones = ["eu-central-1a", "eu-central-1b"]
+
+# EC2
+ec2_instance_type = "t3.medium"
+ec2_key_pair_name = "my-keypair"
+allowed_ssh_cidrs = ["YOUR_IP/32"]
+
+# RDS
+db_instance_class    = "db.t3.micro"
+db_name              = "careermate"
+db_username          = "careermate_admin"
+db_password          = "CHANGE_ME_min16chars!!"
+db_allocated_storage = 20
+
+# ElastiCache
+redis_node_type = "cache.t3.micro"
+
+# S3
+s3_bucket_name = ""  # leave empty for auto-generated name
+
+# App
+app_domain   = "careermate.com"
+jwt_secret   = "CHANGE_ME_min32chars_very_secret_key_here"
+llm_api_key  = ""
+pinecone_api_key = ""
+adzuna_app_id    = ""
+adzuna_app_key   = ""
