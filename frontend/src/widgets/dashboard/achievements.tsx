@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card"
 import { Badge } from "@/shared/ui/badge"
 import { Trophy, Star, Zap, Target, Award, Flame, Lock } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/shared/ui/tooltip"
+import { DashboardSummary } from "./api/use-analytics"
 
 interface Achievement {
   id: string
@@ -16,64 +17,37 @@ interface Achievement {
   color: string
 }
 
-const achievements: Achievement[] = [
-  {
-    id: "1",
-    name: "Первый шаг",
-    description: "Создать первое резюме",
-    icon: Star,
-    unlocked: true,
-    color: "text-yellow-500",
-  },
-  {
-    id: "2",
-    name: "Активный соискатель",
-    description: "Отправить 10 откликов",
-    icon: Zap,
-    unlocked: true,
-    color: "text-blue-500",
-  },
-  {
-    id: "3",
-    name: "Целеустремлённый",
-    description: "Установить карьерную цель",
-    icon: Target,
-    unlocked: true,
-    color: "text-green-500",
-  },
-  {
-    id: "4",
-    name: "Профессионал",
-    description: "Заполнить профиль на 100%",
-    icon: Award,
-    unlocked: false,
-    progress: 78,
-    maxProgress: 100,
-    color: "text-purple-500",
-  },
-  {
-    id: "5",
-    name: "На волне",
-    description: "Получить 5 приглашений на интервью",
-    icon: Flame,
-    unlocked: false,
-    progress: 2,
-    maxProgress: 5,
-    color: "text-orange-500",
-  },
-  {
-    id: "6",
-    name: "Мастер резюме",
-    description: "Создать 3 разных резюме",
-    icon: Trophy,
-    unlocked: false,
-    progress: 1,
-    maxProgress: 3,
-    color: "text-amber-500",
-  },
+const iconMap: Record<string, typeof Trophy> = {
+  "text-yellow-500": Star,
+  "text-blue-500": Zap,
+  "text-green-500": Target,
+  "text-purple-500": Award,
+  "text-orange-500": Flame,
+  "text-amber-500": Trophy,
+}
+
+const defaultAchievements: Achievement[] = [
+  { id: "1", name: "Первый шаг", description: "Создать первое резюме", icon: Star, unlocked: false, progress: 0, maxProgress: 1, color: "text-yellow-500" },
+  { id: "2", name: "Активный соискатель", description: "Отправить 10 откликов", icon: Zap, unlocked: false, progress: 0, maxProgress: 10, color: "text-blue-500" },
+  { id: "3", name: "Целеустремлённый", description: "Установить карьерную цель", icon: Target, unlocked: false, progress: 0, maxProgress: 1, color: "text-green-500" },
+  { id: "4", name: "Профессионал", description: "Заполнить профиль на 100%", icon: Award, unlocked: false, progress: 0, maxProgress: 100, color: "text-purple-500" },
+  { id: "5", name: "На волне", description: "Получить 5 приглашений на интервью", icon: Flame, unlocked: false, progress: 0, maxProgress: 5, color: "text-orange-500" },
+  { id: "6", name: "Мастер резюме", description: "Создать 3 разных резюме", icon: Trophy, unlocked: false, progress: 0, maxProgress: 3, color: "text-amber-500" },
 ]
 
-export function Achievements() {
+interface AchievementsProps {
+  dashboardData?: DashboardSummary;
+}
+
+export function Achievements({ dashboardData }: AchievementsProps) {
+  // Map backend data to Achievement with icons
+  const achievements: Achievement[] = dashboardData?.achievements?.length
+    ? dashboardData.achievements.map((a, i) => ({
+        ...a,
+        icon: iconMap[a.color] || defaultAchievements[i]?.icon || Trophy,
+      }))
+    : defaultAchievements
+
   const unlockedCount = achievements.filter((a) => a.unlocked).length
 
   return (

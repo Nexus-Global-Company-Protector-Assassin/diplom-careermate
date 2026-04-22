@@ -1,5 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Last migration trigger: 2026-04-18
 
 generator client {
   provider = "prisma-client-js"
@@ -51,6 +52,9 @@ model Profile {
 
   analysisResults     AnalysisResult[]
   resumes             Resume[]
+  interviews          Interview[]
+  vacancyResponses    VacancyResponse[]
+  profileSkills       ProfileSkill[]
 }
 
 model AnalysisResult {
@@ -65,14 +69,49 @@ model Resume {
   id        String   @id @default(uuid())
   profileId String
   profile   Profile  @relation(fields: [profileId], references: [id])
+  title     String   @default("Мое резюме")
+  subtitle  String?
   content   String   // Markdown or HTML content
+  status    String   @default("draft") // draft, active, archived
+  type      String   @default("resume") // resume, cover_letter, ai_improved
   version   Int      @default(1)
+  reviewData Json?   // Full AI review result (score, strengths, weaknesses, improved resume)
+  fileKey    String?  // S3/MinIO object key for the original uploaded file
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Interview {
+  id        String   @id @default(uuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id])
+  company   String
+  position  String
+  date      String
+  time      String
+  type      String?  @default("online")
+  location  String?
+  status    String   @default("upcoming") // upcoming, completed, canceled, rejected
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VacancyResponse {
+  id          String   @id @default(uuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id])
+  vacancyId   String?  // Reference to external or internal Vacancy
+  company     String
+  position    String
+  status      String   @default("sent") // sent, viewing, invited, rejected
+  statusColor String   @default("bg-blue-500")
+  responseDate DateTime @default(now())
 }
 
 model Vacancy {
-  id                 String   @id @default(uuid())
-  hhId               String   @unique  // ID вакансии на HH.ru
+  id                 String    @id @default(uuid())
+  hhId               String    @unique  // ID вакансии на HH.ru
   title              String
   employer           String
   location           String?
@@ -80,11 +119,52 @@ model Vacancy {
   salaryTo           Int?
   salaryCurrency     String?
   salaryLabel        String?
-  skills             Json?    // Массив ключевых навыков
+  skills             Json?    // Массив ключевых навыков (legacy, сохранён для fallback)
   descriptionPreview String?
   experience         String?
   schedule           String?
+  url                String?  // Ссылка на оригинальную вакансию
   searchQuery        String   // Поисковый запрос, по которому найдена вакансия
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  publishedAt        DateTime? // Дата публикации вакансии на площадке
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  vacancySkills      VacancySkill[]
+}
+
+// ---------------------------------------------------------------------------
+// Normalized Skills System
+// ---------------------------------------------------------------------------
+
+model Skill {
+  id        String   @id @default(uuid())
+  name      String   @unique // Canonical name: "React", "PostgreSQL", "Docker"
+  category  String?  // "Frontend" | "Backend" | "DevOps" | "Data" | "Mobile" | "Soft"
+  aliases   String[] // ["react.js", "reactjs"] for fuzzy lookup
+  createdAt DateTime @default(now())
+
+  profileSkills ProfileSkill[]
+  vacancySkills VacancySkill[]
+}
+
+model ProfileSkill {
+  profileId String
+  skillId   String
+  level     String? // "beginner" | "intermediate" | "expert"
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, skillId])
+}
+
+model VacancySkill {
+  vacancyId  String
+  skillId    String
+  isRequired Boolean @default(true)
+
+  vacancy Vacancy @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([vacancyId, skillId])
 }

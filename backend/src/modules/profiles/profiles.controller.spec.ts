@@ -49,10 +49,10 @@ describe('ProfilesController', () => {
         it('should return the user profile', async () => {
             mockProfilesService.getProfile.mockResolvedValue(mockProfile);
 
-            const result = await controller.getProfile(mockUser);
+            const result = await controller.getProfile();
 
             expect(result).toEqual(mockProfile);
-            expect(mockProfilesService.getProfile).toHaveBeenCalledWith(USER_ID);
+            expect(mockProfilesService.getProfile).toHaveBeenCalledWith(undefined);
         });
 
         it('should propagate NotFoundException from service', async () => {
@@ -60,7 +60,7 @@ describe('ProfilesController', () => {
                 new NotFoundException('Profile not found'),
             );
 
-            await expect(controller.getProfile(mockUser)).rejects.toThrow(NotFoundException);
+            await expect(controller.getProfile()).rejects.toThrow(NotFoundException);
         });
     });
 
@@ -70,10 +70,10 @@ describe('ProfilesController', () => {
             mockProfilesService.createProfile.mockResolvedValue(mockProfile);
             const dto = { fullName: 'Иван Иванов', desiredPosition: 'Frontend Developer' };
 
-            const result = await controller.createProfile(mockUser, dto as any);
+            const result = await controller.createProfile(dto as any);
 
             expect(result).toEqual(mockProfile);
-            expect(mockProfilesService.createProfile).toHaveBeenCalledWith(USER_ID, dto);
+            expect(mockProfilesService.createProfile).toHaveBeenCalledWith(undefined, dto);
         });
 
         it('should pass the full DTO to service', async () => {
@@ -84,9 +84,9 @@ describe('ProfilesController', () => {
                 experienceYears: 3,
             };
 
-            await controller.createProfile(mockUser, dto as any);
+            await controller.createProfile(dto as any);
 
-            expect(mockProfilesService.createProfile).toHaveBeenCalledWith(USER_ID, dto);
+            expect(mockProfilesService.createProfile).toHaveBeenCalledWith(undefined, dto);
         });
     });
 
@@ -97,10 +97,10 @@ describe('ProfilesController', () => {
             mockProfilesService.updateProfile.mockResolvedValue(updated);
             const dto = { fullName: 'Пётр Петров' };
 
-            const result = await controller.updateProfile(mockUser, dto as any);
+            const result = await controller.updateProfile(dto as any);
 
             expect(result.fullName).toBe('Пётр Петров');
-            expect(mockProfilesService.updateProfile).toHaveBeenCalledWith(USER_ID, dto);
+            expect(mockProfilesService.updateProfile).toHaveBeenCalledWith(undefined, dto);
         });
 
         it('should propagate NotFoundException when profile not found', async () => {
@@ -109,7 +109,7 @@ describe('ProfilesController', () => {
             );
 
             await expect(
-                controller.updateProfile(mockUser, { fullName: 'Test' } as any),
+                controller.updateProfile({ fullName: 'Test' } as any),
             ).rejects.toThrow(NotFoundException);
         });
     });
@@ -121,10 +121,10 @@ describe('ProfilesController', () => {
                 message: 'Profile deleted successfully',
             });
 
-            const result = await controller.deleteProfile(mockUser);
+            const result = await controller.deleteProfile();
 
             expect(result).toEqual({ message: 'Profile deleted successfully' });
-            expect(mockProfilesService.deleteProfile).toHaveBeenCalledWith(USER_ID);
+            expect(mockProfilesService.deleteProfile).toHaveBeenCalledWith(undefined);
         });
 
         it('should propagate NotFoundException when profile not found', async () => {
@@ -132,7 +132,7 @@ describe('ProfilesController', () => {
                 new NotFoundException('Profile not found'),
             );
 
-            await expect(controller.deleteProfile(mockUser)).rejects.toThrow(NotFoundException);
+            await expect(controller.deleteProfile()).rejects.toThrow(NotFoundException);
         });
     });
 });

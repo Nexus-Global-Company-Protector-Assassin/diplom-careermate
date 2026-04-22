@@ -6,6 +6,8 @@ import { AnalyzeProfileTool } from './tools/analyze-profile.tool';
 import { MatchVacanciesTool } from './tools/match-vacancies.tool';
 import { GenerateResumeTool } from './tools/generate-resume.tool';
 import { ParseResumeTool } from './tools/parse-resume.tool';
+import { ReviewResumeTool } from './tools/review-resume.tool';
+import { CreateResumeTool } from './tools/create-resume.tool';
 import { CacheService } from './cache/cache.service';
 import { PineconeService } from './pinecone/pinecone.service';
 import { FileParserService } from './parser/file-parser.service';
@@ -21,6 +23,8 @@ import { ReActAgentService } from './react-agent.service';
         MatchVacanciesTool,
         GenerateResumeTool,
         ParseResumeTool,
+        ReviewResumeTool,
+        CreateResumeTool,
         AgentRunnerService,
         FileParserService,
         ReActAgentService,

@@ -1,4 +1,12 @@
+export interface NormalizedSkillDto {
+    id: string;
+    name: string;
+    category: string | null;
+    level?: string | null;
+}
+
 export interface ProfileDto {
+    id?: string;
     fullName?: string;
     phone?: string;
     location?: string;
@@ -15,6 +23,8 @@ export interface ProfileDto {
     linkedinUrl?: string;
     githubUrl?: string;
     portfolioUrl?: string;
+    // Normalized skills from the Skills Analysis system (read-only, set by backend)
+    profileSkills?: Array<{ skill: NormalizedSkillDto; level?: string | null }>;
 }
 
 export interface AnalysisResultDto {

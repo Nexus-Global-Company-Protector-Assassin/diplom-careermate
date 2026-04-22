@@ -5,19 +5,26 @@ import { Button } from "@/shared/ui/button"
 import { Progress } from "@/shared/ui/progress"
 import { CheckCircle2, Circle, ArrowRight } from "lucide-react"
 import Link from "next/link"
+import { DashboardSummary } from "./api/use-analytics"
 
-const completionItems = [
-  { id: "personal", label: "Личные данные", completed: true, href: "/profile" },
-  { id: "experience", label: "Опыт работы", completed: true, href: "/profile" },
-  { id: "education", label: "Образование", completed: true, href: "/profile" },
-  { id: "skills", label: "Навыки", completed: true, href: "/profile" },
-  { id: "resume", label: "Загружено резюме", completed: true, href: "/resume" },
+const defaultCompletionItems = [
+  { id: "personal", label: "Личные данные", completed: false, href: "/profile" },
+  { id: "experience", label: "Опыт работы", completed: false, href: "/profile" },
+  { id: "education", label: "Образование", completed: false, href: "/profile" },
+  { id: "skills", label: "Навыки", completed: false, href: "/profile" },
+  { id: "resume", label: "Загружено резюме", completed: false, href: "/resume" },
   { id: "photo", label: "Фото профиля", completed: false, href: "/profile" },
-  { id: "goal", label: "Карьерная цель", completed: true, href: "/profile" },
+  { id: "goal", label: "Карьерная цель", completed: false, href: "/profile" },
   { id: "linkedin", label: "Связь с LinkedIn", completed: false, href: "/settings" },
 ]
 
-export function ProfileCompletion() {
+interface ProfileCompletionProps {
+  dashboardData?: DashboardSummary;
+}
+
+export function ProfileCompletion({ dashboardData }: ProfileCompletionProps) {
+  const completionItems = dashboardData?.profileCompletion || defaultCompletionItems
+
   const completedCount = completionItems.filter((item) => item.completed).length
   const percentage = Math.round((completedCount / completionItems.length) * 100)
 

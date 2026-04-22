@@ -53,6 +53,10 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - SENTRY_DSN=${SENTRY_DSN}
+      # Adzuna Job Search API (если не заданы — fallback на mock-данные)
+      - ADZUNA_APP_ID=${ADZUNA_APP_ID}
+      - ADZUNA_APP_KEY=${ADZUNA_APP_KEY}
+      - ADZUNA_COUNTRY=${ADZUNA_COUNTRY:-gb}
     depends_on:
       postgres:
         condition: service_healthy

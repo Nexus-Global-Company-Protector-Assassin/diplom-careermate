@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Button } from "@/shared/ui/button"
 import { Download, FileText, FileSpreadsheet, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu"
+import { api } from "@/shared/api/api-client"
 
 export function ExportData() {
   const [isExporting, setIsExporting] = useState(false)
@@ -14,19 +15,23 @@ export function ExportData() {
     // Simulate export
     await new Promise((resolve) => setTimeout(resolve, 1500))
 
-    // Create mock data
+    let backendData: any = {};
+    try {
+      backendData = await api.get("/profiles/me");
+    } catch (e) {
+      console.warn("Could not fetch profile for export");
+    }
+
+    // Create export payload
     const data = {
       profile: {
-        name: "Баранов Сергей",
-        email: "oldersik@gmail.ru",
-        phone: "+7 (900) 123-45-67",
-        city: "Владивосток",
+        name: backendData?.fullName || "Не указано",
+        email: backendData?.aboutMe?.match(/Email:\s*(.*)/)?.[1] || "Не указано",
+        phone: backendData?.phone || "Не указано",
+        city: backendData?.location || "Не указано",
       },
-      experience: [
-        { position: "Middle Data Analyst", company: "Сбер", period: "2018 - 2020" },
-        { position: "Senior Data Analyst", company: "Озон", period: "2020 - настоящее время" },
-      ],
-      skills: ["Python", "SQL", "Tableau", "Power BI", "A/B тестирование"],
+      experience: backendData?.workExperience || [],
+      skills: [...(backendData?.skills?.technical || []), ...(backendData?.skills?.professional || [])],
       exportDate: new Date().toISOString(),
     }
 

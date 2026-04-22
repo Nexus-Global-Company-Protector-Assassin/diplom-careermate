@@ -5,13 +5,15 @@ import { Card, CardContent } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
 import { Label } from "@/shared/ui/label"
-import { User, Briefcase, GraduationCap, Wrench, X, Plus, Trash2, Upload, Loader2 } from "lucide-react"
+import { User, Briefcase, GraduationCap, Wrench, X, Plus, Trash2, Upload, Loader2, Sparkles } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { useRouter } from "next/navigation"
 import { useRunPoc } from "@/features/poc/api/use-run-poc"
 import { useUploadResume } from "@/features/profile/api/use-upload-resume"
 import { ProfileDto, ParsedProfileDto, PocRunResponseDto } from "@/shared/api"
 import { toast } from "sonner"
+import { useProfile, useUpdateProfile } from "./api/use-profile"
+import { UnifiedSkillsCard } from "./skills-analysis-card"
 
 interface PersonalData {
   fullName: string
@@ -43,6 +45,8 @@ interface Skills {
 
 export function ProfileContent() {
   const router = useRouter()
+  const { data: profileData, isLoading: profileLoading } = useProfile()
+  const { mutate: updateProfile } = useUpdateProfile()
   const { mutate: runPoc, isPending } = useRunPoc()
   const { mutate: uploadResume, isPending: isUploading } = useUploadResume()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -82,62 +86,74 @@ export function ProfileContent() {
   }
 
   const [personalData, setPersonalData] = useState<PersonalData>({
-    fullName: "Баранов Сергей",
-    email: "oldersik@gmail.ru",
-    phone: "+7 (900) 123-45-67",
-    city: "Владивосток",
-    telegram: "https://t.me/skilpadtlof",
-    github: "github.com/todovodopush",
+    fullName: "",
+    email: "",
+    phone: "",
+    city: "",
+    telegram: "",
+    github: "",
   })
 
-  const [workExperience, setWorkExperience] = useState<WorkExperience[]>([
-    { id: "1", position: "Middle Data Analyst", company: "Сбер", period: "2018 - 2020" },
-    { id: "2", position: "Senior Data Analyst", company: "Озон", period: "2020 г. - настоящее время" },
-  ])
+  const [workExperience, setWorkExperience] = useState<WorkExperience[]>([])
 
-  const [education, setEducation] = useState<Education[]>([
-    {
-      id: "1",
-      institution: "Дальневосточный федеральный университет",
-      degree: "Магистр прикладной математики",
-      year: "2018",
-    },
-    { id: "2", institution: "Яндекс.Практикум", degree: "Data Science Specialist", year: "2019" },
-    { id: "3", institution: "Coursera", degree: "Advanced SQL", year: "2022" },
-  ])
+  const [education, setEducation] = useState<Education[]>([])
 
   const [skills, setSkills] = useState<Skills>({
-    technical: [
-      "Python (Pandas, NumPy, Scikit-learn)",
-      "SQL (PostgreSQL, BigQuery)",
-      "Tableau, Power BI",
-      "A/B тестирование",
-      "Машинное обучение",
-    ],
-    professional: [
-      "Data Storytelling",
-      "Продуктовая аналитика",
-      "Работа с кросс-функциональными командами",
-      "Постановка задач",
-    ],
+    technical: [],
+    professional: [],
   })
 
-  // Load from localStorage on mount
+  // Load from database on mount
   useEffect(() => {
-    try {
-      const savedPersonal = localStorage.getItem("careermate_personal")
-      if (savedPersonal) setPersonalData(JSON.parse(savedPersonal))
+    if (profileData) {
+      if (profileData.fullName) setPersonalData(p => ({ ...p, fullName: profileData.fullName! }))
+      if (profileData.phone) setPersonalData(p => ({ ...p, phone: profileData.phone! }))
+      if (profileData.location) setPersonalData(p => ({ ...p, city: profileData.location! }))
+      
+      // Extract Email/Telegram/Github from aboutMe
+      if (profileData.aboutMe) {
+        const emailMatch = profileData.aboutMe.match(/Email:\s*(.*)/)
+        const tgMatch = profileData.aboutMe.match(/Telegram:\s*(.*)/)
+        const ghMatch = profileData.aboutMe.match(/GitHub:\s*(.*)/)
+        setPersonalData(p => ({
+          ...p,
+          email: emailMatch ? emailMatch[1] : p.email,
+          telegram: tgMatch ? tgMatch[1] : p.telegram,
+          github: ghMatch ? ghMatch[1] : p.github,
+        }))
+      }
 
-      const savedWork = localStorage.getItem("careermate_work")
-      if (savedWork) setWorkExperience(JSON.parse(savedWork))
+      if (profileData.workExperience && Array.isArray(profileData.workExperience)) {
+        setWorkExperience(profileData.workExperience)
+      }
+      if (profileData.education && Array.isArray(profileData.education)) {
+        setEducation(profileData.education)
+      }
+      if (profileData.skills && profileData.skills.technical && profileData.skills.professional) {
+        setSkills(profileData.skills)
+      }
+    }
+  }, [profileData])
 
-      const savedEducation = localStorage.getItem("careermate_education")
-      if (savedEducation) setEducation(JSON.parse(savedEducation))
-
-      const savedSkills = localStorage.getItem("careermate_skills")
-      if (savedSkills) setSkills(JSON.parse(savedSkills))
-    } catch (e) { }
-  }, [])
+  const syncToDb = (
+    pd = personalData,
+    we = workExperience,
+    ed = education,
+    sk = skills
+  ) => {
+    const totalExperienceYears = we.reduce((acc, current) => acc + 2, 0);
+    updateProfile({
+      fullName: pd.fullName,
+      phone: pd.phone,
+      location: pd.city,
+      desiredPosition: we[0]?.position || "Специалист",
+      experienceYears: totalExperienceYears,
+      education: ed,
+      workExperience: we,
+      skills: sk,
+      aboutMe: `Telegram: ${pd.telegram}\nGitHub: ${pd.github}\nEmail: ${pd.email}`,
+    })
+  }
 
   // Modal states
   const [personalModalOpen, setPersonalModalOpen] = useState(false)
@@ -160,7 +176,7 @@ export function ProfileContent() {
 
   const savePersonalData = () => {
     setPersonalData(tempPersonal)
-    localStorage.setItem("careermate_personal", JSON.stringify(tempPersonal))
+    syncToDb(tempPersonal, workExperience, education, skills)
     setPersonalModalOpen(false)
   }
 
@@ -183,7 +199,7 @@ export function ProfileContent() {
 
   const saveWorkExperience = () => {
     setWorkExperience(tempWork)
-    localStorage.setItem("careermate_work", JSON.stringify(tempWork))
+    syncToDb(personalData, tempWork, education, skills)
     setWorkModalOpen(false)
   }
 
@@ -206,7 +222,7 @@ export function ProfileContent() {
 
   const saveEducation = () => {
     setEducation(tempEducation)
-    localStorage.setItem("careermate_education", JSON.stringify(tempEducation))
+    syncToDb(personalData, workExperience, tempEducation, skills)
     setEducationModalOpen(false)
   }
 
@@ -241,7 +257,7 @@ export function ProfileContent() {
 
   const saveSkills = () => {
     setSkills(tempSkills)
-    localStorage.setItem("careermate_skills", JSON.stringify(tempSkills))
+    syncToDb(personalData, workExperience, education, tempSkills)
     setSkillsModalOpen(false)
   }
 
@@ -276,9 +292,53 @@ export function ProfileContent() {
     })
   }
 
+  const progressStages = [
+    { text: "Анализируем ваш профиль...", tip: "ИИ вытягивает ключевые навыки из вашего опыта." },
+    { text: "Ищем подходящие вакансии...", tip: "Сверяем ваши данные с базой HeadHunter." },
+    { text: "Пишем идеальное резюме...", tip: "Адаптируем достижения под лучшие предложения." },
+    { text: "Формируем рекомендации...", tip: "Почти готово! Собираем советы для вас." },
+  ]
+  const [currentStage, setCurrentStage] = useState(0)
+
+  useEffect(() => {
+    if (isPending) {
+      setCurrentStage(0);
+      const interval = setInterval(() => {
+        setCurrentStage(prev => (prev < progressStages.length - 1 ? prev + 1 : prev));
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [isPending]);
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-foreground">Профиль</h1>
+    <div className="space-y-6 relative">
+      {/* AI Analysis Overlay */}
+      {isPending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <Card className="w-full max-w-md shadow-2xl border-blue-500/30 overflow-hidden">
+            <div className="h-1 w-full bg-muted">
+              <div 
+                className="h-full bg-blue-500 transition-all duration-1000 ease-in-out" 
+                style={{ width: `${((currentStage + 1) / progressStages.length) * 100}%` }}
+              />
+            </div>
+            <CardContent className="p-8 text-center flex flex-col items-center">
+              <div className="relative mb-6">
+                <div className="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-20" />
+                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-full relative z-10 shadow-lg">
+                  <Loader2 className="w-8 h-8 text-white animate-spin" />
+                </div>
+              </div>
+              <h2 className="text-xl font-bold mb-2 animate-pulse">{progressStages[currentStage].text}</h2>
+              <p className="text-muted-foreground text-sm">{progressStages[currentStage].tip}</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <h1 className="text-2xl font-bold text-foreground">Профиль</h1>
+      </div>
 
       {/* Personal Data */}
       <Card className="bg-card border-border">
@@ -392,41 +452,13 @@ export function ProfileContent() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Skills */}
-      <Card className="bg-card border-border">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10">
-                <Wrench className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <h2 className="text-lg font-semibold text-card-foreground">Навыки</h2>
-            </div>
-            <Button onClick={openSkillsModal} size="sm" className="bg-blue-600 hover:bg-blue-700">
-              Редактировать →
-            </Button>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <h3 className="font-medium mb-2 text-card-foreground">Технические:</h3>
-              <ul className="list-disc list-inside text-sm text-blue-600 dark:text-blue-400 space-y-1">
-                {skills.technical.map((skill, i) => (
-                  <li key={i}>{skill}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-medium mb-2 text-card-foreground">Профессиональные:</h3>
-              <ul className="list-disc list-inside text-sm text-blue-600 dark:text-blue-400 space-y-1">
-                {skills.professional.map((skill, i) => (
-                  <li key={i}>{skill}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Skills — unified card with raw + AI-normalized */}
+      <UnifiedSkillsCard
+        technicalSkills={skills.technical}
+        professionalSkills={skills.professional}
+        normalizedSkills={profileData?.profileSkills ?? []}
+        onEdit={openSkillsModal}
+      />
 
       {/* Personal Data Modal */}
       <Dialog open={personalModalOpen} onOpenChange={setPersonalModalOpen}>
@@ -701,36 +733,7 @@ export function ProfileContent() {
         </DialogContent>
       </Dialog>
 
-      {/* PoC Launcher & Resume Upload */}
-      <div className="mt-8 pt-6 border-t border-border flex flex-wrap gap-3 justify-end">
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          className="hidden"
-          onChange={handleFileUpload}
-        />
-        <Button
-          size="lg"
-          variant="outline"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading || isPending}
-          className="border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 py-6 px-6"
-        >
-          {isUploading
-            ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Разбираем резюме...</>
-            : <><Upload className="h-4 w-4 mr-2" />Загрузить резюме (PDF/DOCX)</>}
-        </Button>
-        <Button
-          size="lg"
-          onClick={handleRunPoc}
-          disabled={isPending || isUploading}
-          className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg text-base py-6 px-8 animate-in fade-in transition-all"
-        >
-          {isPending ? "🤖 Нейросеть анализирует профиль..." : "🚀 Запустить Killer Flow (AI Анализ)"}
-        </Button>
-      </div>
+
     </div>
   )
 }

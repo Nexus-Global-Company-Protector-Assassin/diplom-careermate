@@ -55,36 +55,26 @@ export class CreateProfileDto {
     experienceYears?: number;
 
     @ApiProperty({
-        type: [EducationDto],
-        description: 'Education history',
+        description: 'Education history JSON',
         required: false,
     })
     @IsOptional()
-    @IsArray()
-    @ValidateNested({ each: true })
-    @Type(() => EducationDto)
-    education?: EducationDto[];
+    education?: any;
 
     @ApiProperty({
-        type: [WorkExperienceDto],
-        description: 'Work experience history',
+        description: 'Work experience history JSON',
         required: false,
     })
     @IsOptional()
-    @IsArray()
-    @ValidateNested({ each: true })
-    @Type(() => WorkExperienceDto)
-    workExperience?: WorkExperienceDto[];
+    workExperience?: any;
 
     @ApiProperty({
-        example: ['React', 'TypeScript', 'Node.js'],
+        example: { technical: ['React'], professional: ['Management'] },
         description: 'List of skills',
         required: false,
     })
     @IsOptional()
-    @IsArray()
-    @IsString({ each: true })
-    skills?: string[];
+    skills?: any;
 
     @ApiProperty({
         example: [{ language: 'Russian', level: 'Native' }, { language: 'English', level: 'B2' }],

@@ -146,10 +146,10 @@ export class LlmGatewayService {
      */
     async generateJson<T>(
         messages: LLMMessage[],
-        schema: z.ZodType<T>,
+        schema: z.ZodType<T, any, any>,
         options: LLMOptions = {},
     ): Promise<LLMJsonResponse<T>> {
-        const model = options.model ?? this.fastModel;
+        const model = options.model ?? this.defaultModel;
         const temperature = options.temperature ?? 0.3;
         const maxTokens = options.maxTokens ?? 2048;
 

@@ -20,7 +20,7 @@ export class PineconeService implements OnModuleInit {
         }
 
         try {
-            this.pinecone = new Pinecone({ apiKey });
+            this.pinecone = new Pinecone({ apiKey } as any);
             this.logger.log(`Pinecone initialized, index: ${this.indexName}`);
         } catch (error) {
             this.logger.error(`Failed to initialize Pinecone: ${(error as Error).message}`);

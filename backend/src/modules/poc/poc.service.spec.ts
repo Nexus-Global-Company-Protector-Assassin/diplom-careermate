@@ -77,6 +77,7 @@ describe('PocService', () => {
     let http: ReturnType<typeof makeHttp>;
 
     beforeEach(async () => {
+        jest.spyOn(console, 'error').mockImplementation(() => {});
         prisma = makePrisma();
         http = makeHttp();
 
@@ -91,7 +92,10 @@ describe('PocService', () => {
         service = module.get<PocService>(PocService);
     });
 
-    afterEach(() => jest.clearAllMocks());
+    afterEach(() => {
+        jest.restoreAllMocks();
+        jest.clearAllMocks();
+    });
 
     // ──────────────────────────────── runAnalysis ─────────────────────────────
     describe('runAnalysis', () => {

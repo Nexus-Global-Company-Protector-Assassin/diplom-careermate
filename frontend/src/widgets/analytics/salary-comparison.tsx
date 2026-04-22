@@ -3,31 +3,42 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card"
 import { Badge } from "@/shared/ui/badge"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
-
-interface SalaryData {
-  position: string
-  yourSalary: number
-  marketAvg: number
-  marketMin: number
-  marketMax: number
-}
-
-const salaryData: SalaryData = {
-  position: "Senior Data Analyst",
-  yourSalary: 275000,
-  marketAvg: 250000,
-  marketMin: 180000,
-  marketMax: 350000,
-}
+import { useDashboardSummary } from "@/widgets/dashboard/api/use-analytics"
 
 export function SalaryComparison() {
-  const percentDiff = Math.round(((salaryData.yourSalary - salaryData.marketAvg) / salaryData.marketAvg) * 100)
-  const yourPosition =
-    ((salaryData.yourSalary - salaryData.marketMin) / (salaryData.marketMax - salaryData.marketMin)) * 100
+  const { data: dashboard } = useDashboardSummary()
+
+  const salaryData = dashboard?.salaryData || {
+    position: "Не указана",
+    yourSalary: 0,
+    marketAvg: 200000,
+    marketMin: 100000,
+    marketMax: 350000,
+    vacanciesInRange: 0,
+  }
+
+  const percentDiff = salaryData.marketAvg > 0
+    ? Math.round(((salaryData.yourSalary - salaryData.marketAvg) / salaryData.marketAvg) * 100)
+    : 0
+
+  const range = salaryData.marketMax - salaryData.marketMin
+  const yourPosition = range > 0
+    ? Math.max(0, Math.min(100, ((salaryData.yourSalary - salaryData.marketMin) / range) * 100))
+    : 50
 
   const formatSalary = (amount: number) => {
+    if (amount === 0) return "Не указана"
     return new Intl.NumberFormat("ru-RU").format(amount) + " ₽"
   }
+
+  const getEvaluation = () => {
+    if (percentDiff > 10) return { text: "Отлично", color: "text-green-600" }
+    if (percentDiff >= -5) return { text: "Хорошо", color: "text-green-600" }
+    if (percentDiff >= -15) return { text: "Средне", color: "text-yellow-600" }
+    return { text: "Ниже рынка", color: "text-red-600" }
+  }
+
+  const evaluation = getEvaluation()
 
   return (
     <Card className="bg-card border-border">
@@ -75,7 +86,7 @@ export function SalaryComparison() {
             <div
               className="absolute top-0 bottom-0 w-0.5 bg-gray-500"
               style={{
-                left: `${((salaryData.marketAvg - salaryData.marketMin) / (salaryData.marketMax - salaryData.marketMin)) * 100}%`,
+                left: `${range > 0 ? ((salaryData.marketAvg - salaryData.marketMin) / range) * 100 : 50}%`,
               }}
             />
             {/* Your salary marker */}
@@ -92,17 +103,17 @@ export function SalaryComparison() {
         <div className="grid grid-cols-3 gap-3 pt-2">
           <div className="text-center p-2 rounded-lg bg-muted/30">
             <p className="text-lg font-bold text-card-foreground">
-              {Math.round((yourPosition / 100) * 100)}
+              {Math.round(yourPosition)}
               <span className="text-sm font-normal text-muted-foreground">%</span>
             </p>
             <p className="text-xs text-muted-foreground">Ваш перцентиль</p>
           </div>
           <div className="text-center p-2 rounded-lg bg-muted/30">
-            <p className="text-lg font-bold text-card-foreground">156</p>
+            <p className="text-lg font-bold text-card-foreground">{salaryData.vacanciesInRange}</p>
             <p className="text-xs text-muted-foreground">Вакансий в диапазоне</p>
           </div>
           <div className="text-center p-2 rounded-lg bg-muted/30">
-            <p className="text-lg font-bold text-green-600">Хорошо</p>
+            <p className={`text-lg font-bold ${evaluation.color}`}>{evaluation.text}</p>
             <p className="text-xs text-muted-foreground">Оценка</p>
           </div>
         </div>

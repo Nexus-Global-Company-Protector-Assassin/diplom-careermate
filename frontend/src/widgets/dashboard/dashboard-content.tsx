@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import Link from "next/link"
@@ -23,6 +23,7 @@ import { Achievements } from "@/widgets/dashboard/achievements"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { Input } from "@/shared/ui/input"
 import { Label } from "@/shared/ui/label"
+import { useWeeklyAnalytics, useDashboardSummary } from "./api/use-analytics"
 
 const quickActions = [
   { icon: FileText, label: "Создать резюме", color: "bg-blue-500/10 text-blue-600", href: "/resume" },
@@ -39,14 +40,26 @@ interface CareerGoal {
 }
 
 export function DashboardContent() {
-  const [careerGoal, setCareerGoal] = useState<CareerGoal>({
-    position: "Senior Data Analyst",
-    location: "Владивосток / Удалённо",
-    salary: "250 000 - 300 000 ₽",
-    experience: "5+ лет в аналитике",
-  })
+  const { data: analyticsStats } = useWeeklyAnalytics()
+  const { data: dashboard } = useDashboardSummary()
+
+  const defaultGoal: CareerGoal = {
+    position: "Не указана",
+    location: "Не указана",
+    salary: "Не указана",
+    experience: "Не указан",
+  }
+
+  const [careerGoal, setCareerGoal] = useState<CareerGoal>(defaultGoal)
   const [goalModalOpen, setGoalModalOpen] = useState(false)
-  const [tempGoal, setTempGoal] = useState<CareerGoal>(careerGoal)
+  const [tempGoal, setTempGoal] = useState<CareerGoal>(defaultGoal)
+
+  // Sync career goal from backend data
+  useEffect(() => {
+    if (dashboard?.careerGoal) {
+      setCareerGoal(dashboard.careerGoal)
+    }
+  }, [dashboard])
 
   const saveGoal = () => {
     setCareerGoal(tempGoal)
@@ -58,6 +71,17 @@ export function DashboardContent() {
     setGoalModalOpen(true)
   }
 
+  const userName = dashboard?.fullName || "Пользователь"
+  const careerProgress = dashboard?.careerProgress || [
+    { label: "Анализ завершен", done: false },
+    { label: "Резюме готово", done: false },
+    { label: "Отклики идут", done: false },
+    { label: "Приглашения", done: false },
+  ]
+
+  const doneCount = careerProgress.filter((s) => s.done).length
+  const progressPercent = Math.round((doneCount / careerProgress.length) * 100)
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Welcome Header */}
@@ -66,7 +90,7 @@ export function DashboardContent() {
           <div className="text-2xl sm:text-3xl">🤖</div>
         </div>
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Привет, Nikname!</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Привет, {userName}!</h1>
           <p className="text-sm sm:text-base text-muted-foreground">Вы ещё на шаг ближе к работе своей мечты!</p>
         </div>
       </div>
@@ -79,15 +103,10 @@ export function DashboardContent() {
             <div className="absolute top-5 left-0 right-0 h-1.5 bg-muted rounded-full" />
             <div
               className="absolute top-5 left-0 h-1.5 rounded-full bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-400 shadow-sm shadow-blue-500/50"
-              style={{ width: "25%" }}
+              style={{ width: `${progressPercent}%` }}
             />
             <div className="relative flex justify-between">
-              {[
-                { label: "Анализ завершен", done: true },
-                { label: "Резюме готово", done: false },
-                { label: "Отклики идут", done: false },
-                { label: "Приглашения", done: false },
-              ].map((step, i) => (
+              {careerProgress.map((step, i) => (
                 <div key={i} className="flex flex-col items-center">
                   <div
                     className={`relative z-10 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full transition-all duration-300 ${
@@ -118,7 +137,7 @@ export function DashboardContent() {
         </CardContent>
       </Card>
 
-      <Achievements />
+      <Achievements dashboardData={dashboard} />
 
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
         {/* Quick Actions */}
@@ -160,7 +179,7 @@ export function DashboardContent() {
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mb-4">Обновлено 2 дня назад</p>
+            <p className="text-xs text-muted-foreground mb-4">Из вашего профиля</p>
             <div className="space-y-3 sm:space-y-4">
               {[
                 { icon: Target, label: "Должность", value: careerGoal.position },
@@ -185,7 +204,7 @@ export function DashboardContent() {
 
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
         <InterviewTracker />
-        <ProfileCompletion />
+        <ProfileCompletion dashboardData={dashboard} />
       </div>
 
       {/* Weekly Report */}
@@ -193,12 +212,12 @@ export function DashboardContent() {
         <CardContent className="p-4 sm:p-6">
           <h2 className="text-lg font-semibold mb-4 sm:mb-6 text-card-foreground">Отчёт за неделю</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
-            {[
-              { icon: "📋", value: "5", label: "Новые вакансии" },
-              { icon: "🗓️", value: "2", label: "Интервью назначено" },
-              { icon: "📧", value: "8", label: "Откликов отправлено" },
-              { icon: "🤖", value: "1", label: "Рекомендации ИИ" },
-            ].map((stat, i) => (
+            {(analyticsStats || [
+              { icon: "📋", value: "0", label: "Новые вакансии" },
+              { icon: "🗓️", value: "0", label: "Интервью назначено" },
+              { icon: "📧", value: "0", label: "Откликов отправлено" },
+              { icon: "🤖", value: "0", label: "Рекомендации ИИ" },
+            ]).map((stat: any, i: number) => (
               <div key={i} className="text-center">
                 <div className="text-2xl sm:text-3xl mb-2">{stat.icon}</div>
                 <p className="text-xl sm:text-2xl font-bold text-card-foreground">{stat.value}</p>
@@ -219,7 +238,7 @@ export function DashboardContent() {
             <div className="flex-1">
               <h3 className="text-lg font-semibold mb-2">Рекомендации от AI-ассистента</h3>
               <p className="text-sm text-slate-300 mb-4">
-                Рекомендую обновить раздел "Навыки" — появились новые тренды в аналитике данных. Добавьте Python, SQL и
+                Рекомендую обновить раздел &quot;Навыки&quot; — появились новые тренды в аналитике данных. Добавьте Python, SQL и
                 работу с облачными сервисами для повышения конкурентоспособности на 30%.
               </p>
               <Link href="/profile">
