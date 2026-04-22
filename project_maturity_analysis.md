@@ -160,12 +160,18 @@
 
 - [x] **24. DevOps — Terraform и Monitoring пустые**
 `devops/terraform/` — полный AWS IaC (VPC, EC2, RDS, ElastiCache, S3, IAM, SGs). `devops/monitoring/` — Prometheus + Grafana + Alertmanager stack с 10 alert rules и 12-panel dashboard. `backend/src/modules/metrics/` — кастомный Prometheus endpoint (без внешних зависимостей).
+- devops/terraform/ — 9 .tf файлов: VPC с публичными/приватными подсетями, EC2 (Amazon Linux 2023), RDS PostgreSQL 16, ElastiCache Redis 7, S3 bucket, IAM role с S3-доступом, security groups    
+- devops/monitoring/ — Prometheus + Grafana + Alertmanager через docker-compose; 10 alert rules (BackendDown, HighErrorRate, SlowResponses и др.); 12-panel dashboard
+- backend/src/modules/metrics/ — кастомный Prometheus exposition format без внешних зависимостей(Counter + Histogram + Node.js/OS gauges), middleware для инструментации всех HTTP-запросов
+Тесты: 123/123, TypeScript: чистый.
+
+
 
 - [x] **25. Нет логирования в structured format**
 `nest-winston` и `winston` установлены. В коде везде используется встроенный `Logger` от NestJS. Winston не настроен — нет JSON логов, нет отправки в centralized logging.
 
-**26. Нет обработки ошибок на фронтенде**
-Нет глобального error boundary, нет toast-уведомлений об ошибках API, нет retry-логики. Если бэк недоступен — страница просто зависает или показывает пустой экран.
+- [x] **26. Нет обработки ошибок на фронтенде**
+`ApiError` с классификацией (network/auth/not_found/server). `error.tsx` + `global-error.tsx` — Next.js App Router error boundaries. Smart retry в React Query (нет retry на 4xx, exponential backoff на network/5xx). Глобальный toast через `QueryCache.onError` / `MutationCache.onError` + Sonner Toaster в layout.
 
 ---
 
