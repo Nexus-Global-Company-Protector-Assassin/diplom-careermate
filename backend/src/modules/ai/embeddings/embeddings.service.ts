@@ -1,87 +1,91 @@
-// backend/src/modules/ai/embeddings/embeddings.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { Pinecone } from '@pinecone-database/pinecone';
-import { firstValueFrom } from 'rxjs';
+import { QdrantClient } from '@qdrant/js-client-rest';
+import { QdrantVectorStore } from '@langchain/community/vectorstores/qdrant';
+import { PolzaAiEmbeddings } from './polza-ai.embeddings';
 
 @Injectable()
-export class EmbeddingsService {
+export class EmbeddingsService implements OnModuleInit {
     private readonly logger = new Logger(EmbeddingsService.name);
-    private pineconeIndex: ReturnType<Pinecone['index']> | null = null;
+    private readonly VECTOR_SIZE = 1536;
+    private qdrantClient: QdrantClient | null = null;
+    private vectorStore: QdrantVectorStore | null = null;
 
     constructor(
         private readonly httpService: HttpService,
         private readonly configService: ConfigService,
     ) {}
 
-    private getIndex(): ReturnType<Pinecone['index']> {
-        const apiKey = this.configService.get<string>('PINECONE_API_KEY');
-        const indexName = this.configService.get<string>('PINECONE_INDEX_NAME');
-        const environment = this.configService.get<string>('PINECONE_ENVIRONMENT');
-
-        if (!apiKey) throw new Error('Pinecone API key is not configured.');
-        if (!indexName) throw new Error('Pinecone index name is not configured.');
-        if (!environment) throw new Error('Pinecone environment is not configured.');
-
-        if (!this.pineconeIndex) {
-            const pc = new Pinecone({ apiKey, environment });
-            this.pineconeIndex = pc.index(indexName);
-        }
-        return this.pineconeIndex;
-    }
-
-    private async getEmbedding(text: string): Promise<number[]> {
-        const apiKey = this.configService.get<string>('LLM_API_KEY');
-        if (!apiKey) throw new Error('LLM API key is not configured for embeddings.');
-
-        const baseUrl = this.configService.get<string>(
-            'LLM_API_BASE_URL',
-            'https://api.openai.com/v1',
-        );
-
-        const response = await firstValueFrom(
-            this.httpService.post(
-                `${baseUrl}/embeddings`,
-                { model: 'text-embedding-3-small', input: text.slice(0, 8000) },
-                {
-                    headers: {
-                        Authorization: `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json',
-                    },
-                },
-            ),
-        );
-
-        return response.data.data[0].embedding as number[];
-    }
-
-    /**
-     * Upsert a vacancy's embedding vector into Pinecone.
-     * Config errors (missing API key) propagate. Runtime errors are caught and logged.
-     */
-    async indexVacancy(id: string, text: string): Promise<void> {
-        const index = this.getIndex(); // throws if misconfigured
+    async onModuleInit() {
         try {
-            const vector = await this.getEmbedding(text);
-            await index.upsert([{ id, values: vector }]);
-            this.logger.debug(`Indexed vacancy ${id} in Pinecone`);
+            await this.ensureCollection();
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.warn(`Qdrant collection init skipped: ${msg}`);
+        }
+    }
+
+    private getClient(): QdrantClient {
+        if (!this.qdrantClient) {
+            const url = this.configService.get<string>('QDRANT_URL');
+            const apiKey = this.configService.get<string>('QDRANT_API_KEY');
+            if (!url) throw new Error('Qdrant URL is not configured.');
+            if (!apiKey) throw new Error('Qdrant API key is not configured.');
+            this.qdrantClient = new QdrantClient({ url, apiKey });
+        }
+        return this.qdrantClient;
+    }
+
+    private getCollection(): string {
+        const name = this.configService.get<string>('QDRANT_COLLECTION');
+        if (!name) throw new Error('Qdrant collection name is not configured.');
+        return name;
+    }
+
+    private getVectorStore(): QdrantVectorStore {
+        if (!this.vectorStore) {
+            const client = this.getClient();
+            const collectionName = this.getCollection();
+            const embeddings = new PolzaAiEmbeddings(this.httpService, this.configService);
+            this.vectorStore = new QdrantVectorStore(embeddings, {
+                client,
+                collectionName,
+            });
+        }
+        return this.vectorStore;
+    }
+
+    private async ensureCollection(): Promise<void> {
+        const client = this.getClient();
+        const collection = this.getCollection();
+        const { collections } = await client.getCollections();
+        if (!collections.some((c) => c.name === collection)) {
+            await client.createCollection(collection, {
+                vectors: { size: this.VECTOR_SIZE, distance: 'Cosine' },
+            });
+            this.logger.log(`Created Qdrant collection: ${collection}`);
+        }
+    }
+
+    async indexVacancy(id: string, text: string): Promise<void> {
+        const vectorStore = this.getVectorStore();
+        try {
+            await vectorStore.addDocuments([
+                { pageContent: text, metadata: { vacancyId: id } },
+            ]);
+            this.logger.debug(`Indexed vacancy ${id} in Qdrant`);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.warn(`Failed to index vacancy ${id}: ${msg}`);
         }
     }
 
-    /**
-     * Find vacancy IDs semantically similar to queryText, sorted by cosine similarity.
-     * Config errors propagate. Runtime errors return [].
-     */
     async searchSimilar(queryText: string, topK: number): Promise<string[]> {
-        const index = this.getIndex(); // throws if misconfigured
+        const vectorStore = this.getVectorStore();
         try {
-            const vector = await this.getEmbedding(queryText);
-            const results = await index.query({ vector, topK, includeValues: false });
-            return (results.matches ?? []).map((m: any) => m.id as string);
+            const results = await vectorStore.similaritySearch(queryText, topK);
+            return results.map((doc) => doc.metadata.vacancyId as string);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.warn(`Semantic search failed: ${msg}`);
