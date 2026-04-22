@@ -101,6 +101,20 @@ services:
     profiles:
       - dev
 
+  # Qdrant (Vector Database — семантический поиск вакансий)
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: careermate-qdrant
+    restart: unless-stopped
+    ports:
+      - '${QDRANT_PORT:-6333}:6333'
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - careermate-network
+    profiles:
+      - local-qdrant
+
   # Mailhog (Email testing для локальной разработки)
   mailhog:
     image: mailhog/mailhog:latest
@@ -122,6 +136,8 @@ volumes:
   pgadmin_data:
     driver: local
   minio_data:
+    driver: local
+  qdrant_data:
     driver: local
 
 networks:
