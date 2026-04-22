@@ -1,77 +1,79 @@
+// backend/src/modules/ai/embeddings/embeddings.service.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { EmbeddingsService } from './embeddings.service';
-import { of, throwError } from 'rxjs';
 
-// ── Pinecone mock (module-level so it applies to all tests) ──────────────────
-const mockUpsert = jest.fn().mockResolvedValue({});
-const mockQuery = jest.fn().mockResolvedValue({
-    matches: [
-        { id: 'vacancy-1', score: 0.95 },
-        { id: 'vacancy-2', score: 0.82 },
-    ],
-});
-const mockPineconeIndex = { upsert: mockUpsert, query: mockQuery };
+// ── QdrantVectorStore mock ───────────────────────────────────────────────────
+const mockAddDocuments = jest.fn().mockResolvedValue(undefined);
+const mockSimilaritySearch = jest.fn().mockResolvedValue([
+    { pageContent: 'Frontend Developer', metadata: { vacancyId: 'vacancy-1' } },
+    { pageContent: 'Backend Developer', metadata: { vacancyId: 'vacancy-2' } },
+]);
 
-jest.mock('@pinecone-database/pinecone', () => ({
-    Pinecone: jest.fn().mockImplementation(() => ({
-        index: jest.fn().mockReturnValue(mockPineconeIndex),
+jest.mock('@langchain/community/vectorstores/qdrant', () => ({
+    QdrantVectorStore: jest.fn().mockImplementation(() => ({
+        addDocuments: mockAddDocuments,
+        similaritySearch: mockSimilaritySearch,
     })),
 }));
 
-// ── Shared constants ─────────────────────────────────────────────────────────
-const MOCK_VECTOR = Array(1536).fill(0.1);
-
-const mockEmbeddingResponse = {
-    data: { data: [{ embedding: MOCK_VECTOR }] },
-};
-
-// ── Mock factories ───────────────────────────────────────────────────────────
-const makeHttp = () => ({
-    post: jest.fn().mockReturnValue(of(mockEmbeddingResponse)),
+// ── QdrantClient mock (used by ensureCollection) ─────────────────────────────
+const mockGetCollections = jest.fn().mockResolvedValue({
+    collections: [{ name: 'test-collection' }],
 });
 
+jest.mock('@qdrant/js-client-rest', () => ({
+    QdrantClient: jest.fn().mockImplementation(() => ({
+        getCollections: mockGetCollections,
+        createCollection: jest.fn().mockResolvedValue({}),
+    })),
+}));
+
+// ── PolzaAiEmbeddings mock ───────────────────────────────────────────────────
+jest.mock('./polza-ai.embeddings', () => ({
+    PolzaAiEmbeddings: jest.fn().mockImplementation(() => ({})),
+}));
+
+// ── Mock factories ───────────────────────────────────────────────────────────
+const makeHttp = () => ({ post: jest.fn() });
+
 const makeConfig = (overrides: Record<string, string> = {}) => ({
-    get: jest.fn((key: string) => {
+    get: jest.fn((key: string, defaultValue?: string) => {
         const defaults: Record<string, string> = {
-            PINECONE_API_KEY: 'test-pinecone-key',
-            PINECONE_INDEX_NAME: 'test-index',
-            PINECONE_ENVIRONMENT: 'us-west1-gcp',
+            QDRANT_URL: 'http://localhost:6333',
+            QDRANT_COLLECTION: 'test-collection',
+            QDRANT_API_KEY: 'test-api-key',
             LLM_API_KEY: 'test-llm-key',
-            LLM_API_BASE_URL: 'https://api.openai.com/v1',
+            LLM_API_BASE_URL: 'https://polza.ai/api/v1',
+            EMBEDDINGS_MODEL_NAME: 'openai/text-embedding-3-small',
         };
-        return overrides[key] ?? defaults[key];
+        return overrides[key] ?? defaults[key] ?? defaultValue;
     }),
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
 describe('EmbeddingsService', () => {
     let service: EmbeddingsService;
-    let http: ReturnType<typeof makeHttp>;
 
     beforeEach(async () => {
         jest.clearAllMocks();
 
-        // Restore default implementations after clearAllMocks
-        mockUpsert.mockResolvedValue({});
-        mockQuery.mockResolvedValue({
-            matches: [
-                { id: 'vacancy-1', score: 0.95 },
-                { id: 'vacancy-2', score: 0.82 },
-            ],
-        });
+        mockGetCollections.mockResolvedValue({ collections: [{ name: 'test-collection' }] });
+        mockAddDocuments.mockResolvedValue(undefined);
+        mockSimilaritySearch.mockResolvedValue([
+            { pageContent: 'Frontend Developer', metadata: { vacancyId: 'vacancy-1' } },
+            { pageContent: 'Backend Developer', metadata: { vacancyId: 'vacancy-2' } },
+        ]);
 
         jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
         jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => {});
 
-        http = makeHttp();
-
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 EmbeddingsService,
-                { provide: HttpService, useValue: http },
+                { provide: HttpService, useValue: makeHttp() },
                 { provide: ConfigService, useValue: makeConfig() },
             ],
         }).compile();
@@ -83,38 +85,19 @@ describe('EmbeddingsService', () => {
 
     // ──────────────────────────── indexVacancy ───────────────────────────────
     describe('indexVacancy', () => {
-        it('should call embedding API with vacancy text', async () => {
+        it('should call addDocuments with pageContent and vacancyId metadata', async () => {
             await service.indexVacancy('vac-123', 'Frontend Developer React TypeScript');
 
-            expect(http.post).toHaveBeenCalledWith(
-                'https://api.openai.com/v1/embeddings',
-                expect.objectContaining({
-                    model: 'text-embedding-3-small',
-                    input: 'Frontend Developer React TypeScript',
-                }),
-                expect.objectContaining({
-                    headers: expect.objectContaining({ Authorization: 'Bearer test-llm-key' }),
-                }),
-            );
-        });
-
-        it('should upsert the embedding vector into Pinecone with vacancy id', async () => {
-            await service.indexVacancy('vac-123', 'Frontend Developer React TypeScript');
-
-            expect(mockUpsert).toHaveBeenCalledWith([
-                { id: 'vac-123', values: MOCK_VECTOR },
+            expect(mockAddDocuments).toHaveBeenCalledWith([
+                {
+                    pageContent: 'Frontend Developer React TypeScript',
+                    metadata: { vacancyId: 'vac-123' },
+                },
             ]);
         });
 
-        it('should not throw when Pinecone upsert fails (fire-and-forget safe)', async () => {
-            mockUpsert.mockRejectedValueOnce(new Error('Pinecone network error'));
-            await expect(
-                service.indexVacancy('vac-123', 'some text'),
-            ).resolves.toBeUndefined();
-        });
-
-        it('should not throw when embedding API fails', async () => {
-            http.post.mockReturnValueOnce(throwError(() => new Error('OpenAI down')));
+        it('should not throw when addDocuments fails (fire-and-forget safe)', async () => {
+            mockAddDocuments.mockRejectedValueOnce(new Error('Qdrant network error'));
             await expect(
                 service.indexVacancy('vac-123', 'some text'),
             ).resolves.toBeUndefined();
@@ -123,30 +106,15 @@ describe('EmbeddingsService', () => {
 
     // ─────────────────────────── searchSimilar ───────────────────────────────
     describe('searchSimilar', () => {
-        it('should return vacancy IDs sorted by cosine similarity', async () => {
+        it('should call similaritySearch and return vacancyIds from metadata', async () => {
             const result = await service.searchSimilar('Frontend Developer React', 5);
 
-            expect(mockQuery).toHaveBeenCalledWith(
-                expect.objectContaining({ topK: 5, includeValues: false }),
-            );
+            expect(mockSimilaritySearch).toHaveBeenCalledWith('Frontend Developer React', 5);
             expect(result).toEqual(['vacancy-1', 'vacancy-2']);
         });
 
-        it('should pass the query vector from the embedding API to Pinecone', async () => {
-            await service.searchSimilar('some query text', 10);
-
-            const queryCall = mockQuery.mock.calls[0][0];
-            expect(queryCall.vector).toEqual(MOCK_VECTOR);
-        });
-
-        it('should return empty array when Pinecone query fails', async () => {
-            mockQuery.mockRejectedValueOnce(new Error('Query failed'));
-            const result = await service.searchSimilar('some query', 5);
-            expect(result).toEqual([]);
-        });
-
-        it('should return empty array when embedding API fails', async () => {
-            http.post.mockReturnValueOnce(throwError(() => new Error('OpenAI down')));
+        it('should return empty array when similaritySearch fails', async () => {
+            mockSimilaritySearch.mockRejectedValueOnce(new Error('Query failed'));
             const result = await service.searchSimilar('some query', 5);
             expect(result).toEqual([]);
         });
@@ -154,33 +122,45 @@ describe('EmbeddingsService', () => {
 
     // ──────────────────────── configuration errors ───────────────────────────
     describe('configuration errors', () => {
-        it('should throw when PINECONE_API_KEY is not set', async () => {
+        it('should throw when QDRANT_URL is not set', async () => {
             const module = await Test.createTestingModule({
                 providers: [
                     EmbeddingsService,
-                    { provide: HttpService, useValue: http },
-                    { provide: ConfigService, useValue: makeConfig({ PINECONE_API_KEY: '' }) },
+                    { provide: HttpService, useValue: makeHttp() },
+                    { provide: ConfigService, useValue: makeConfig({ QDRANT_URL: '' }) },
                 ],
             }).compile();
-
             const svc = module.get<EmbeddingsService>(EmbeddingsService);
             await expect(svc.indexVacancy('id', 'text')).rejects.toThrow(
-                'Pinecone API key is not configured.',
+                'Qdrant URL is not configured.',
             );
         });
 
-        it('should throw when PINECONE_INDEX_NAME is not set', async () => {
+        it('should throw when QDRANT_API_KEY is not set', async () => {
             const module = await Test.createTestingModule({
                 providers: [
                     EmbeddingsService,
-                    { provide: HttpService, useValue: http },
-                    { provide: ConfigService, useValue: makeConfig({ PINECONE_INDEX_NAME: '' }) },
+                    { provide: HttpService, useValue: makeHttp() },
+                    { provide: ConfigService, useValue: makeConfig({ QDRANT_API_KEY: '' }) },
                 ],
             }).compile();
+            const svc = module.get<EmbeddingsService>(EmbeddingsService);
+            await expect(svc.indexVacancy('id', 'text')).rejects.toThrow(
+                'Qdrant API key is not configured.',
+            );
+        });
 
+        it('should throw when QDRANT_COLLECTION is not set', async () => {
+            const module = await Test.createTestingModule({
+                providers: [
+                    EmbeddingsService,
+                    { provide: HttpService, useValue: makeHttp() },
+                    { provide: ConfigService, useValue: makeConfig({ QDRANT_COLLECTION: '' }) },
+                ],
+            }).compile();
             const svc = module.get<EmbeddingsService>(EmbeddingsService);
             await expect(svc.searchSimilar('text', 5)).rejects.toThrow(
-                'Pinecone index name is not configured.',
+                'Qdrant collection name is not configured.',
             );
         });
     });
