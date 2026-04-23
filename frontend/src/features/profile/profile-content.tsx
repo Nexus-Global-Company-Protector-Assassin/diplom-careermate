@@ -398,8 +398,8 @@ export function ProfileContent() {
             </Button>
           </div>
           <div className="space-y-6">
-            {workExperience.map((work) => (
-              <div key={work.id} className="space-y-1 text-sm">
+            {workExperience.map((work, idx) => (
+              <div key={`${work.company}-${work.position}-${idx}`} className="space-y-1 text-sm">
                 <p>
                   <span className="text-muted-foreground">Должность:</span>{" "}
                   <span className="text-blue-600 dark:text-blue-400">{work.position}</span>
@@ -433,8 +433,8 @@ export function ProfileContent() {
             </Button>
           </div>
           <div className="space-y-6">
-            {education.map((edu) => (
-              <div key={edu.id} className="space-y-1 text-sm">
+            {education.map((edu, idx) => (
+              <div key={`${edu.institution}-${idx}`} className="space-y-1 text-sm">
                 <p>
                   <span className="text-muted-foreground">Место:</span>{" "}
                   <span className="text-blue-600 dark:text-blue-400">{edu.institution}</span>
