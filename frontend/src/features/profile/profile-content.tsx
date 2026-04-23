@@ -350,8 +350,6 @@ export function ProfileContent() {
 
   const openSkillsModal = () => {
     setTempSkills({ ...skills, technical: [...skills.technical], professional: [...skills.professional] })
-    setNewTechnicalSkill("")
-    setNewProfessionalSkill("")
     setSkillsModalOpen(true)
   }
 
