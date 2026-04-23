@@ -20,7 +20,7 @@ import { Button } from "@/shared/ui/button"
 import { BebsichLogo } from "@/shared/assets/bebsich-logo"
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/profile", label: "Профиль", icon: User },
   { href: "/resume", label: "Резюме", icon: FileText },
   { href: "/vacancies", label: "Вакансии", icon: Briefcase },
@@ -53,7 +53,7 @@ export function Sidebar() {
               isCollapsed ? "justify-center" : "justify-between",
             )}
           >
-            <Link href="/" className="flex items-center gap-2">
+            <Link href="/dashboard" className="flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-100 to-cyan-100 shrink-0 overflow-hidden">
                 <BebsichLogo className="h-7 w-7" />
               </div>

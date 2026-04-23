@@ -20,6 +20,7 @@ import { SearchCommand } from "@/widgets/header/search-command"
 import { InterviewPrep } from "@/features/interview/interview-prep"
 import { CoverLetterGenerator } from "@/features/resume/cover-letter-generator"
 import { KeyboardShortcuts } from "@/features/help/keyboard-shortcuts"
+import { useLogout } from "@/features/auth/api/use-auth"
 
 const notifications = [
   {
@@ -54,6 +55,7 @@ const notifications = [
 
 export function Header() {
   const { toggleMobile } = useSidebar()
+  const logout = useLogout()
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationsList, setNotificationsList] = useState(notifications)
   const [interviewPrepOpen, setInterviewPrepOpen] = useState(false)
@@ -215,7 +217,7 @@ export function Header() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600 focus:text-red-600 cursor-pointer">
+              <DropdownMenuItem onClick={logout} className="text-red-600 focus:text-red-600 cursor-pointer">
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Выйти</span>
               </DropdownMenuItem>
