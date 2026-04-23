@@ -89,12 +89,14 @@ export class SkillsService implements OnModuleInit {
             return { id: cached.id, name: cached.name, category: cached.category };
         }
 
-        // 2. If not found, create new canonical skill
+        // 2. If not found, upsert canonical skill (upsert prevents P2002 race conditions)
         const canonical = rawName.charAt(0).toUpperCase() + rawName.slice(1).trim();
-        this.logger.debug(`Creating new skill: "${canonical}" (normalized: "${normalized}")`);
-        
-        const newSkill = await this.prisma.skill.create({
-            data: {
+        this.logger.debug(`Upserting skill: "${canonical}" (normalized: "${normalized}")`);
+
+        const newSkill = await this.prisma.skill.upsert({
+            where: { name: canonical },
+            update: {},
+            create: {
                 name: canonical,
                 category: category || 'Other',
                 aliases: normalized !== canonical.toLowerCase() ? [normalized] : [],

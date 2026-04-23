@@ -510,9 +510,10 @@ export function ProfileContent() {
               <Label className="text-card-foreground">Email</Label>
               <Input
                 value={tempPersonal.email}
-                onChange={(e) => setTempPersonal({ ...tempPersonal, email: e.target.value })}
-                className="bg-background border-border"
+                readOnly
+                className="bg-muted border-border text-muted-foreground cursor-not-allowed"
               />
+              <p className="text-xs text-muted-foreground">Email привязан к аккаунту и не может быть изменён здесь</p>
             </div>
             <div className="space-y-2">
               <Label className="text-card-foreground">Телефон</Label>
