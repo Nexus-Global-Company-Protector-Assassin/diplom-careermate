@@ -23,7 +23,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 const CATEGORY_LABELS: Record<string, string> = {
   Frontend: "Frontend", Backend: "Backend", DevOps: "DevOps",
   Data: "Data / ML", Mobile: "Mobile", Database: "Database",
-  Tools: "Tools", Soft: "Soft Skills",
+  Tools: "Tools", Soft: "Soft Skills", Other: "Прочее",
 }
 
 function NormalizedBadge({ skill }: { skill: NormalizedSkillDto }) {
