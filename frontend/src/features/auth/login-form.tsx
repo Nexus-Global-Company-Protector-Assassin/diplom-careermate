@@ -28,12 +28,13 @@ export function LoginForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" autoComplete="on">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="login-email">Email</Label>
         <Input
           id="login-email"
           type="email"
+          autoComplete="email"
           placeholder="you@example.com"
           aria-invalid={!!errors.email}
           {...register('email')}
@@ -48,6 +49,7 @@ export function LoginForm() {
         <Input
           id="login-password"
           type="password"
+          autoComplete="current-password"
           placeholder="••••••••"
           aria-invalid={!!errors.password}
           {...register('password')}
