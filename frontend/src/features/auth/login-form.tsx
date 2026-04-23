@@ -13,7 +13,7 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Введите пароль'),
 });
 
-type LoginForm = z.infer<typeof loginSchema>;
+type LoginFormValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const login = useLogin();
@@ -21,9 +21,9 @@ export function LoginForm() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
+  } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) });
 
-  const onSubmit = (data: LoginForm) => {
+  const onSubmit = (data: LoginFormValues) => {
     login.mutate({ email: data.email, password: data.password });
   };
 
