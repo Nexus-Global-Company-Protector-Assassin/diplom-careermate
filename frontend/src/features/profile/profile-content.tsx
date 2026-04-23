@@ -6,13 +6,14 @@ import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
 import { Label } from "@/shared/ui/label"
 import { User, Briefcase, GraduationCap, Wrench, X, Plus, Trash2, Upload, Loader2, Sparkles } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { useRouter } from "next/navigation"
 import { useRunPoc } from "@/features/poc/api/use-run-poc"
 import { useUploadResume } from "@/features/profile/api/use-upload-resume"
 import { ProfileDto, ParsedProfileDto, PocRunResponseDto } from "@/shared/api"
 import { toast } from "sonner"
 import { useProfile, useUpdateProfile } from "./api/use-profile"
+import { getAccessToken } from "@/shared/lib/auth"
 import { UnifiedSkillsCard } from "./skills-analysis-card"
 
 interface PersonalData {
@@ -106,13 +107,24 @@ export function ProfileContent() {
   // Load from database on mount
   useEffect(() => {
     if (profileData) {
+      // Decode email from JWT payload (email is not in Profile, it's on User)
+      let emailFromToken = ''
+      try {
+        const token = getAccessToken()
+        if (token) {
+          const payload = JSON.parse(atob(token.split('.')[1]))
+          emailFromToken = payload.email || ''
+        }
+      } catch { /* ignore */ }
+
       setPersonalData(p => ({
         ...p,
-        fullName:  profileData.fullName  || p.fullName,
-        phone:     profileData.phone     || p.phone,
-        city:      profileData.location  || p.city,
-        github:    profileData.githubUrl || p.github,
+        fullName:  profileData.fullName    || p.fullName,
+        phone:     profileData.phone       || p.phone,
+        city:      profileData.location    || p.city,
+        github:    profileData.githubUrl   || p.github,
         telegram:  profileData.linkedinUrl || p.telegram,
+        email:     emailFromToken          || p.email,
       }))
 
       // workExperience: DB stores { company, position, startDate, endDate, current }
@@ -483,6 +495,7 @@ export function ProfileContent() {
         <DialogContent className="sm:max-w-[500px] bg-card border-border">
           <DialogHeader>
             <DialogTitle className="text-card-foreground">Редактировать личные данные</DialogTitle>
+            <DialogDescription className="sr-only">Измените личные данные профиля</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -554,6 +567,7 @@ export function ProfileContent() {
         <DialogContent className="sm:max-w-[600px] bg-card border-border max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-card-foreground">Редактировать опыт работы</DialogTitle>
+            <DialogDescription className="sr-only">Добавьте или измените места работы</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {tempWork.map((work, index) => (
@@ -614,6 +628,7 @@ export function ProfileContent() {
         <DialogContent className="sm:max-w-[600px] bg-card border-border max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-card-foreground">Редактировать образование</DialogTitle>
+            <DialogDescription className="sr-only">Добавьте или измените учебные заведения</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {tempEducation.map((edu, index) => (
@@ -677,6 +692,7 @@ export function ProfileContent() {
         <DialogContent className="sm:max-w-[600px] bg-card border-border max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-card-foreground">Редактировать навыки</DialogTitle>
+            <DialogDescription className="sr-only">Добавьте или удалите навыки</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="space-y-3">
