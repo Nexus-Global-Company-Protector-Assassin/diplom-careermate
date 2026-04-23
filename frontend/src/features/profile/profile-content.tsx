@@ -7,12 +7,15 @@ import { Input } from "@/shared/ui/input"
 import { Label } from "@/shared/ui/label"
 import { User, Briefcase, GraduationCap, Wrench, X, Plus, Trash2, Upload, Loader2, Sparkles } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/shared/ui/command"
 import { useRouter } from "next/navigation"
 import { useRunPoc } from "@/features/poc/api/use-run-poc"
 import { useUploadResume } from "@/features/profile/api/use-upload-resume"
 import { ProfileDto, ParsedProfileDto, PocRunResponseDto } from "@/shared/api"
 import { toast } from "sonner"
 import { useProfile, useUpdateProfile } from "./api/use-profile"
+import { useSkillsDictionary } from "./api/use-skills"
 import { getAccessToken } from "@/shared/lib/auth"
 import { UnifiedSkillsCard } from "./skills-analysis-card"
 
@@ -42,6 +45,97 @@ interface Education {
 interface Skills {
   technical: string[]
   professional: string[]
+}
+
+function SkillCombobox({
+  onAdd,
+  exclude,
+  color = "blue",
+  placeholder = "Поиск навыка...",
+}: {
+  onAdd: (name: string) => void
+  exclude: string[]
+  color?: "blue" | "emerald"
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const { data: dictionary = [] } = useSkillsDictionary()
+
+  const excludeLower = new Set(exclude.map(s => s.toLowerCase()))
+  const suggestions = dictionary
+    .filter(s => !excludeLower.has(s.name.toLowerCase()) && s.name.toLowerCase().includes(query.toLowerCase()))
+    .slice(0, 12)
+
+  const commit = (name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    onAdd(trimmed)
+    setQuery("")
+    setOpen(false)
+  }
+
+  const btnCls = color === "emerald"
+    ? "bg-emerald-600 hover:bg-emerald-700"
+    : "bg-blue-600 hover:bg-blue-700"
+
+  return (
+    <div className="flex gap-2">
+      <Popover open={open && (query.length > 0 || suggestions.length > 0)} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Input
+            value={query}
+            onChange={e => { setQuery(e.target.value); setOpen(true) }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={e => {
+              if (e.key === "Enter") { e.preventDefault(); commit(query) }
+              if (e.key === "Escape") setOpen(false)
+            }}
+            placeholder={placeholder}
+            className="bg-background border-border"
+          />
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-[280px] p-0"
+          align="start"
+          onOpenAutoFocus={e => e.preventDefault()}
+        >
+          <Command>
+            <CommandList>
+              {suggestions.length === 0 && query.length > 1 && (
+                <CommandEmpty
+                  className="py-2 px-3 text-sm cursor-pointer hover:bg-accent"
+                  onClick={() => commit(query)}
+                >
+                  Добавить «{query}»
+                </CommandEmpty>
+              )}
+              {suggestions.length > 0 && (
+                <CommandGroup>
+                  {suggestions.map(skill => (
+                    <CommandItem
+                      key={skill.id}
+                      value={skill.name}
+                      onSelect={() => commit(skill.name)}
+                      className="flex justify-between"
+                    >
+                      <span>{skill.name}</span>
+                      {skill.category && (
+                        <span className="text-xs text-muted-foreground ml-2">{skill.category}</span>
+                      )}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      <Button onClick={() => commit(query)} size="icon" className={btnCls}>
+        <Plus className="h-4 w-4" />
+      </Button>
+    </div>
+  )
 }
 
 export function ProfileContent() {
@@ -196,8 +290,6 @@ export function ProfileContent() {
   const [tempWork, setTempWork] = useState<WorkExperience[]>(workExperience)
   const [tempEducation, setTempEducation] = useState<Education[]>(education)
   const [tempSkills, setTempSkills] = useState<Skills>(skills)
-  const [newTechnicalSkill, setNewTechnicalSkill] = useState("")
-  const [newProfessionalSkill, setNewProfessionalSkill] = useState("")
 
   const openPersonalModal = () => {
     setTempPersonal(personalData)
@@ -263,26 +355,12 @@ export function ProfileContent() {
     setSkillsModalOpen(true)
   }
 
-  const addTechnicalSkill = () => {
-    if (newTechnicalSkill.trim()) {
-      setTempSkills({ ...tempSkills, technical: [...tempSkills.technical, newTechnicalSkill.trim()] })
-      setNewTechnicalSkill("")
-    }
-  }
-
-  const addProfessionalSkill = () => {
-    if (newProfessionalSkill.trim()) {
-      setTempSkills({ ...tempSkills, professional: [...tempSkills.professional, newProfessionalSkill.trim()] })
-      setNewProfessionalSkill("")
-    }
-  }
-
   const removeTechnicalSkill = (index: number) => {
-    setTempSkills({ ...tempSkills, technical: tempSkills.technical.filter((_, i) => i !== index) })
+    setTempSkills(s => ({ ...s, technical: s.technical.filter((_, i) => i !== index) }))
   }
 
   const removeProfessionalSkill = (index: number) => {
-    setTempSkills({ ...tempSkills, professional: tempSkills.professional.filter((_, i) => i !== index) })
+    setTempSkills(s => ({ ...s, professional: s.professional.filter((_, i) => i !== index) }))
   }
 
   const saveSkills = () => {
@@ -711,18 +789,12 @@ export function ProfileContent() {
                   </span>
                 ))}
               </div>
-              <div className="flex gap-2">
-                <Input
-                  value={newTechnicalSkill}
-                  onChange={(e) => setNewTechnicalSkill(e.target.value)}
-                  placeholder="Добавить навык..."
-                  onKeyDown={(e) => e.key === "Enter" && addTechnicalSkill()}
-                  className="bg-background border-border"
-                />
-                <Button onClick={addTechnicalSkill} size="icon" className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
+              <SkillCombobox
+                onAdd={skill => setTempSkills(s => ({ ...s, technical: [...s.technical, skill] }))}
+                exclude={tempSkills.technical}
+                color="blue"
+                placeholder="Поиск или добавление навыка..."
+              />
             </div>
             <div className="space-y-3">
               <Label className="text-card-foreground font-semibold">Профессиональные навыки</Label>
@@ -739,18 +811,12 @@ export function ProfileContent() {
                   </span>
                 ))}
               </div>
-              <div className="flex gap-2">
-                <Input
-                  value={newProfessionalSkill}
-                  onChange={(e) => setNewProfessionalSkill(e.target.value)}
-                  placeholder="Добавить навык..."
-                  onKeyDown={(e) => e.key === "Enter" && addProfessionalSkill()}
-                  className="bg-background border-border"
-                />
-                <Button onClick={addProfessionalSkill} size="icon" className="bg-emerald-600 hover:bg-emerald-700">
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
+              <SkillCombobox
+                onAdd={skill => setTempSkills(s => ({ ...s, professional: [...s.professional, skill] }))}
+                exclude={tempSkills.professional}
+                color="emerald"
+                placeholder="Поиск или добавление навыка..."
+              />
             </div>
           </div>
           <DialogFooter>
