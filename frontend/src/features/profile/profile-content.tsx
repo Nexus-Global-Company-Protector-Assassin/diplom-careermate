@@ -60,12 +60,13 @@ function SkillCombobox({
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
+  const wrapRef = useRef<HTMLDivElement>(null)
   const { data: dictionary = [] } = useSkillsDictionary()
 
   const excludeLower = new Set(exclude.map(s => s.toLowerCase()))
   const suggestions = dictionary
     .filter(s => !excludeLower.has(s.name.toLowerCase()) && s.name.toLowerCase().includes(query.toLowerCase()))
-    .slice(0, 12)
+    .slice(0, 15)
 
   const commit = (name: string) => {
     const trimmed = name.trim()
@@ -75,63 +76,67 @@ function SkillCombobox({
     setOpen(false)
   }
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  const showDropdown = open && (suggestions.length > 0 || query.length > 1)
   const btnCls = color === "emerald"
     ? "bg-emerald-600 hover:bg-emerald-700"
     : "bg-blue-600 hover:bg-blue-700"
 
   return (
-    <div className="flex gap-2">
-      <Popover open={open && (query.length > 0 || suggestions.length > 0)} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Input
-            value={query}
-            onChange={e => { setQuery(e.target.value); setOpen(true) }}
-            onFocus={() => setOpen(true)}
-            onKeyDown={e => {
-              if (e.key === "Enter") { e.preventDefault(); commit(query) }
-              if (e.key === "Escape") setOpen(false)
-            }}
-            placeholder={placeholder}
-            className="bg-background border-border"
-          />
-        </PopoverTrigger>
-        <PopoverContent
-          className="w-[280px] p-0"
-          align="start"
-          onOpenAutoFocus={e => e.preventDefault()}
-        >
-          <Command>
-            <CommandList>
+    <div ref={wrapRef} className="flex gap-2 relative">
+      <div className="relative flex-1">
+        <Input
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={e => {
+            if (e.key === "Enter") { e.preventDefault(); commit(query) }
+            if (e.key === "Escape") setOpen(false)
+            if (e.key === "ArrowDown" && suggestions.length > 0) {
+              const first = wrapRef.current?.querySelector<HTMLButtonElement>("[data-skill-item]")
+              first?.focus()
+            }
+          }}
+          placeholder={placeholder}
+          className="bg-background border-border w-full"
+        />
+        {showDropdown && (
+          <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[240px] rounded-md border border-border bg-popover shadow-lg overflow-hidden">
+            <div className="max-h-52 overflow-y-auto">
               {suggestions.length === 0 && query.length > 1 && (
-                <CommandEmpty
-                  className="py-2 px-3 text-sm cursor-pointer hover:bg-accent"
-                  onClick={() => commit(query)}
+                <button
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors"
+                  onMouseDown={e => { e.preventDefault(); commit(query) }}
                 >
-                  Добавить «{query}»
-                </CommandEmpty>
+                  Добавить «<span className="font-medium">{query}</span>»
+                </button>
               )}
-              {suggestions.length > 0 && (
-                <CommandGroup>
-                  {suggestions.map(skill => (
-                    <CommandItem
-                      key={skill.id}
-                      value={skill.name}
-                      onSelect={() => commit(skill.name)}
-                      className="flex justify-between"
-                    >
-                      <span>{skill.name}</span>
-                      {skill.category && (
-                        <span className="text-xs text-muted-foreground ml-2">{skill.category}</span>
-                      )}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              )}
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-      <Button onClick={() => commit(query)} size="icon" className={btnCls}>
+              {suggestions.map(skill => (
+                <button
+                  key={skill.id}
+                  data-skill-item
+                  className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent transition-colors focus:bg-accent focus:outline-none"
+                  onMouseDown={e => { e.preventDefault(); commit(skill.name) }}
+                >
+                  <span>{skill.name}</span>
+                  {skill.category && (
+                    <span className="text-xs text-muted-foreground ml-3 shrink-0">{skill.category}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <Button onMouseDown={e => { e.preventDefault(); commit(query) }} size="icon" className={btnCls}>
         <Plus className="h-4 w-4" />
       </Button>
     </div>
