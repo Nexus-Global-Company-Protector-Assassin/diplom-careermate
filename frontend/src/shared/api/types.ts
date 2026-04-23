@@ -60,3 +60,8 @@ export interface ChatMessage {
 export type ChatResponseDto =
     | { type: 'result'; data: any; message: string }
     | { type: 'questions'; data: string[]; message: string };
+
+export interface AuthResponseDto {
+  access_token: string;
+  refresh_token: string;
+}
