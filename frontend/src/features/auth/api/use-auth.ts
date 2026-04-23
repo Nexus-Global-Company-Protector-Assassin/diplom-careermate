@@ -54,8 +54,11 @@ export function useRegister() {
 export function useLogout() {
   const router = useRouter();
 
-  return () => {
-    clearTokens();
-    router.push('/');
-  };
+  return useMutation({
+    mutationFn: () => api.post('/auth/logout', {}),
+    onSettled: () => {
+      clearTokens();
+      router.push('/');
+    },
+  });
 }

@@ -12,7 +12,7 @@ const registerSchema = z
   .object({
     name: z.string().min(2, 'Имя должно содержать минимум 2 символа'),
     email: z.string().email('Введите корректный email'),
-    password: z.string().min(8, 'Пароль должен содержать минимум 8 символов'),
+    password: z.string().min(6, 'Пароль должен содержать минимум 6 символов'),
     confirmPassword: z.string().min(1, 'Подтвердите пароль'),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -31,6 +31,7 @@ export function RegisterForm() {
   } = useForm<RegisterFormValues>({ resolver: zodResolver(registerSchema) });
 
   const onSubmit = (data: RegisterFormValues) => {
+    // name and confirmPassword are validated client-side only; backend RegisterDto accepts email+password
     register_.mutate({ email: data.email, password: data.password });
   };
 
