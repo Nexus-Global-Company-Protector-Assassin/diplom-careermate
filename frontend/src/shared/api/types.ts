@@ -62,6 +62,6 @@ export type ChatResponseDto =
     | { type: 'questions'; data: string[]; message: string };
 
 export interface AuthResponseDto {
-  access_token: string;
-  refresh_token: string;
+    access_token: string;
+    refresh_token: string;
 }
