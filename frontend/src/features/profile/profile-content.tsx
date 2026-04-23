@@ -106,31 +106,49 @@ export function ProfileContent() {
   // Load from database on mount
   useEffect(() => {
     if (profileData) {
-      if (profileData.fullName) setPersonalData(p => ({ ...p, fullName: profileData.fullName! }))
-      if (profileData.phone) setPersonalData(p => ({ ...p, phone: profileData.phone! }))
-      if (profileData.location) setPersonalData(p => ({ ...p, city: profileData.location! }))
-      
-      // Extract Email/Telegram/Github from aboutMe
-      if (profileData.aboutMe) {
-        const emailMatch = profileData.aboutMe.match(/Email:\s*(.*)/)
-        const tgMatch = profileData.aboutMe.match(/Telegram:\s*(.*)/)
-        const ghMatch = profileData.aboutMe.match(/GitHub:\s*(.*)/)
-        setPersonalData(p => ({
-          ...p,
-          email: emailMatch ? emailMatch[1] : p.email,
-          telegram: tgMatch ? tgMatch[1] : p.telegram,
-          github: ghMatch ? ghMatch[1] : p.github,
+      setPersonalData(p => ({
+        ...p,
+        fullName:  profileData.fullName  || p.fullName,
+        phone:     profileData.phone     || p.phone,
+        city:      profileData.location  || p.city,
+        github:    profileData.githubUrl || p.github,
+        telegram:  profileData.linkedinUrl || p.telegram,
+      }))
+
+      // workExperience: DB stores { company, position, startDate, endDate, current }
+      // Component needs { id, company, position, period }
+      if (Array.isArray(profileData.workExperience)) {
+        const mapped = (profileData.workExperience as any[]).map((w, i) => ({
+          id:       w.id       || String(Date.now() + i),
+          position: w.position || '',
+          company:  w.company  || '',
+          period:   w.period   || (w.startDate
+            ? `${w.startDate}${w.current ? ' — настоящее время' : w.endDate ? ` — ${w.endDate}` : ''}`
+            : ''),
         }))
+        setWorkExperience(mapped)
       }
 
-      if (profileData.workExperience && Array.isArray(profileData.workExperience)) {
-        setWorkExperience(profileData.workExperience)
+      // education: DB stores { institution, field, degree, endYear }
+      // Component needs { id, institution, degree, year }
+      if (Array.isArray(profileData.education)) {
+        const mapped = (profileData.education as any[]).map((e, i) => ({
+          id:          e.id          || String(Date.now() + i),
+          institution: e.institution || '',
+          degree:      e.field       || e.degree || '',
+          year:        e.year        || String(e.endYear || ''),
+        }))
+        setEducation(mapped)
       }
-      if (profileData.education && Array.isArray(profileData.education)) {
-        setEducation(profileData.education)
-      }
-      if (profileData.skills && profileData.skills.technical && profileData.skills.professional) {
-        setSkills(profileData.skills)
+
+      // skills: DB may be flat string[] or { technical, professional }
+      if (profileData.skills) {
+        const s = profileData.skills as any
+        if (s.technical) {
+          setSkills(s)
+        } else if (Array.isArray(s)) {
+          setSkills({ technical: s as string[], professional: [] })
+        }
       }
     }
   }, [profileData])
@@ -141,17 +159,17 @@ export function ProfileContent() {
     ed = education,
     sk = skills
   ) => {
-    const totalExperienceYears = we.reduce((acc, current) => acc + 2, 0);
     updateProfile({
-      fullName: pd.fullName,
-      phone: pd.phone,
-      location: pd.city,
-      desiredPosition: we[0]?.position || "Специалист",
-      experienceYears: totalExperienceYears,
-      education: ed,
-      workExperience: we,
-      skills: sk,
-      aboutMe: `Telegram: ${pd.telegram}\nGitHub: ${pd.github}\nEmail: ${pd.email}`,
+      fullName:        pd.fullName,
+      phone:           pd.phone,
+      location:        pd.city,
+      desiredPosition: we[0]?.position || 'Специалист',
+      experienceYears: we.length * 2,
+      education:       ed,
+      workExperience:  we,
+      skills:          sk,
+      githubUrl:       pd.github   || undefined,
+      linkedinUrl:     pd.telegram || undefined,
     })
   }
 
@@ -539,7 +557,7 @@ export function ProfileContent() {
           </DialogHeader>
           <div className="space-y-6 py-4">
             {tempWork.map((work, index) => (
-              <div key={work.id} className="space-y-3 p-4 border border-border rounded-lg relative">
+              <div key={work.id || index} className="space-y-3 p-4 border border-border rounded-lg relative">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -599,7 +617,7 @@ export function ProfileContent() {
           </DialogHeader>
           <div className="space-y-6 py-4">
             {tempEducation.map((edu, index) => (
-              <div key={edu.id} className="space-y-3 p-4 border border-border rounded-lg relative">
+              <div key={edu.id || index} className="space-y-3 p-4 border border-border rounded-lg relative">
                 <Button
                   variant="ghost"
                   size="icon"
