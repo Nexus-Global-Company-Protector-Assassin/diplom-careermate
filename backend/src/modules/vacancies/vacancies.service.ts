@@ -467,7 +467,7 @@ export class VacanciesService {
                 // Freshness (Ghost Job pre-check)
                 const freshness = calcVacancyFreshness(v.publishedAt, v.createdAt, v.updatedAt);
 
-                // Hybrid score: 60% keyword match + 40% semantic similarity
+                // Hybrid score: 50% keyword match + 30% semantic (+ 20% personal when userId present)
                 const semanticScore = semanticRank.get(v.id) ?? 0;
                 const combinedScore = 0.5 * (matchScore / 100) + 0.3 * semanticScore;
 
