@@ -371,6 +371,7 @@ describe('VacanciesService', () => {
 
         it('upserts interaction and invalidates cache when profile exists', async () => {
             prisma.profile.findFirst.mockResolvedValue({ id: 'profile-uuid-1' });
+            const userPrefs = (service as any).userPreferences;
             await service.recordInteraction('vac-1', 'click', 'user-1');
             expect(prisma.vacancyInteraction.upsert).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -378,6 +379,7 @@ describe('VacanciesService', () => {
                     create: expect.objectContaining({ profileId: 'profile-uuid-1', vacancyId: 'vac-1', type: 'click' }),
                 }),
             );
+            expect(userPrefs.invalidateCache).toHaveBeenCalledWith('profile-uuid-1');
         });
     });
 });
