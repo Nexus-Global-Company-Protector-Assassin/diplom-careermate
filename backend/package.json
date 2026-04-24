@@ -109,6 +109,10 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "moduleNameMapper": {
+      "^@qdrant/(.*)$": "<rootDir>/../__mocks__/empty-module.js",
+      "^@langchain/community/vectorstores/qdrant$": "<rootDir>/../__mocks__/empty-module.js"
+    },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],

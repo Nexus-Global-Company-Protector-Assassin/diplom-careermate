@@ -20,7 +20,7 @@ const makeInteraction = (overrides: Partial<any> = {}): any => ({
     type: 'click',
     createdAt: new Date(),
     vacancy: {
-        title: 'Backend Developer',
+        title: 'Senior Backend Developer',
         descriptionPreview: '',
         salaryFrom: 50000,
         salaryTo: 60000,
@@ -106,32 +106,63 @@ describe('UserPreferencesService', () => {
             const f = service.extractVacancyFeatures({ schedule: null, location: null });
             expect(Object.keys(f.work_format)).toHaveLength(0);
         });
+
+        it('detects senior seniority', () => {
+            const f = service.extractVacancyFeatures({ title: 'Senior Backend Developer' });
+            expect(f.seniority).toEqual({ senior: 1 });
+        });
+
+        it('detects junior seniority', () => {
+            const f = service.extractVacancyFeatures({ title: 'Junior React Developer' });
+            expect(f.seniority).toEqual({ junior: 1 });
+        });
+
+        it('detects mid seniority', () => {
+            const f = service.extractVacancyFeatures({ title: 'Middle Frontend Engineer' });
+            expect(f.seniority).toEqual({ mid: 1 });
+        });
+
+        it('detects lead seniority', () => {
+            const f = service.extractVacancyFeatures({ title: 'Tech Lead / Principal Engineer' });
+            expect(f.seniority).toEqual({ lead: 1 });
+        });
+
+        it('returns empty seniority when no level in title', () => {
+            const f = service.extractVacancyFeatures({ title: 'Backend Developer' });
+            expect(Object.keys(f.seniority)).toHaveLength(0);
+        });
     });
 
     // ─── computePersonalScore ─────────────────────────────────────────────
     describe('computePersonalScore', () => {
         it('returns 0 when all preference dimensions are empty', () => {
-            const prefs = { archetype: {}, salary_band: {}, work_format: {} };
-            const features = { archetype: { Backend: 1 }, salary_band: { mid: 1 }, work_format: { onsite: 1 } };
+            const prefs = { archetype: {}, salary_band: {}, work_format: {}, seniority: {} };
+            const features = { archetype: { Backend: 1 }, salary_band: { mid: 1 }, work_format: { onsite: 1 }, seniority: { senior: 1 } };
             expect(service.computePersonalScore(prefs, features)).toBe(0);
         });
 
         it('returns preference score for single matching archetype', () => {
-            const prefs = { archetype: { Backend: 0.8, Frontend: 0.2 }, salary_band: {}, work_format: {} };
-            const features = { archetype: { Backend: 1 }, salary_band: {}, work_format: {} };
+            const prefs = { archetype: { Backend: 0.8, Frontend: 0.2 }, salary_band: {}, work_format: {}, seniority: {} };
+            const features = { archetype: { Backend: 1 }, salary_band: {}, work_format: {}, seniority: {} };
             expect(service.computePersonalScore(prefs, features)).toBeCloseTo(0.8);
         });
 
         it('averages score across available dimensions', () => {
-            const prefs = { archetype: { Backend: 0.7 }, salary_band: { mid: 0.9 }, work_format: {} };
-            const features = { archetype: { Backend: 1 }, salary_band: { mid: 1 }, work_format: {} };
+            const prefs = { archetype: { Backend: 0.7 }, salary_band: { mid: 0.9 }, work_format: {}, seniority: {} };
+            const features = { archetype: { Backend: 1 }, salary_band: { mid: 1 }, work_format: {}, seniority: {} };
             expect(service.computePersonalScore(prefs, features)).toBeCloseTo(0.8);
         });
 
         it('skips dimensions where vacancy has no feature data', () => {
-            const prefs = { archetype: { Backend: 0.6 }, salary_band: { mid: 1.0 }, work_format: { onsite: 1.0 } };
-            const features = { archetype: { Backend: 1 }, salary_band: {}, work_format: {} };
+            const prefs = { archetype: { Backend: 0.6 }, salary_band: { mid: 1.0 }, work_format: { onsite: 1.0 }, seniority: { senior: 1.0 } };
+            const features = { archetype: { Backend: 1 }, salary_band: {}, work_format: {}, seniority: {} };
             expect(service.computePersonalScore(prefs, features)).toBeCloseTo(0.6);
+        });
+
+        it('includes seniority dimension in final score', () => {
+            const prefs = { archetype: {}, salary_band: {}, work_format: {}, seniority: { senior: 0.9, junior: 0.1 } };
+            const features = { archetype: {}, salary_band: {}, work_format: {}, seniority: { senior: 1 } };
+            expect(service.computePersonalScore(prefs, features)).toBeCloseTo(0.9);
         });
     });
 
@@ -140,7 +171,7 @@ describe('UserPreferencesService', () => {
         it('returns empty preferences when there are no interactions', async () => {
             prisma.vacancyInteraction.findMany.mockResolvedValue([]);
             const prefs = await service.compute('profile-1');
-            expect(prefs).toEqual({ archetype: {}, salary_band: {}, work_format: {} });
+            expect(prefs).toEqual({ archetype: {}, salary_band: {}, work_format: {}, seniority: {} });
         });
 
         it('returns cached preferences on Redis hit without hitting DB', async () => {
@@ -181,6 +212,25 @@ describe('UserPreferencesService', () => {
             expect(prefs.archetype['Backend'] || 0).toBeGreaterThan(prefs.archetype['Frontend'] || 0);
         });
 
+        it('accumulates seniority preferences from interactions', async () => {
+            prisma.vacancyInteraction.findMany.mockResolvedValue([
+                makeInteraction({
+                    type: 'apply',
+                    vacancy: { title: 'Senior Backend Developer', descriptionPreview: '', salaryFrom: null, salaryTo: null, schedule: null, location: null },
+                }),
+                makeInteraction({
+                    type: 'apply',
+                    vacancy: { title: 'Senior Node.js Engineer', descriptionPreview: '', salaryFrom: null, salaryTo: null, schedule: null, location: null },
+                }),
+                makeInteraction({
+                    type: 'click',
+                    vacancy: { title: 'Junior React Developer', descriptionPreview: '', salaryFrom: null, salaryTo: null, schedule: null, location: null },
+                }),
+            ]);
+            const prefs = await service.compute('profile-1');
+            expect(prefs.seniority['senior'] || 0).toBeGreaterThan(prefs.seniority['junior'] || 0);
+        });
+
         it('dismiss reduces preference for that archetype vs positive interaction', async () => {
             prisma.vacancyInteraction.findMany.mockResolvedValue([
                 makeInteraction({
@@ -199,7 +249,7 @@ describe('UserPreferencesService', () => {
         it('falls through to DB gracefully when Redis get throws', async () => {
             redis.get.mockRejectedValue(new Error('ECONNREFUSED'));
             prisma.vacancyInteraction.findMany.mockResolvedValue([]);
-            await expect(service.compute('profile-1')).resolves.toEqual({ archetype: {}, salary_band: {}, work_format: {} });
+            await expect(service.compute('profile-1')).resolves.toEqual({ archetype: {}, salary_band: {}, work_format: {}, seniority: {} });
         });
     });
 

@@ -118,10 +118,38 @@ services:
     networks:
       - careermate-network
 
+  # ML Ranking Service (FastAPI + LightGBM stub)
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: careermate-ml
+    restart: always
+    ports:
+      - "${ML_SERVICE_PORT:-3003}:3003"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/careermate}
+      ML_SERVICE_PORT: 3003
+      SHADOW_MODE: ${ML_SHADOW_MODE:-true}
+    volumes:
+      - ml_models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3003/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    networks:
+      - careermate-network
+
 volumes:
   postgres_data:
   redis_data:
   minio_data:
+  ml_models:
 
 networks:
   careermate-network:

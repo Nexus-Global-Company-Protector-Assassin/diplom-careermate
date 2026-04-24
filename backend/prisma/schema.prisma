@@ -201,3 +201,19 @@ model RecommendationImpression {
 
   @@index([profileId, createdAt])
 }
+
+// Tracks trained ML model versions and their evaluation metrics
+model MLModelVersion {
+  id           String   @id @default(uuid())
+  version      String   @unique  // "stub-v0", "lgbm-v1"
+  algorithm    String            // "stub", "lgbm", "logreg"
+  trainedAt    DateTime
+  precision10  Float?            // precision@10
+  ndcg10       Float?            // NDCG@10
+  auc          Float?
+  isActive     Boolean  @default(false)
+  artefactPath String?           // path to serialized model file
+  trainSamples Int?              // number of training samples used
+  notes        String?
+  createdAt    DateTime @default(now())
+}

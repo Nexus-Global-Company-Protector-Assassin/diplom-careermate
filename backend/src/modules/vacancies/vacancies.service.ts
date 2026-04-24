@@ -8,90 +8,13 @@ import { SkillsService } from '../skills/skills.service';
 import { EmbeddingsService } from '../ai/embeddings/embeddings.service';
 import { QuestionGenService } from '../interviews/question-gen/question-gen.service';
 import { UserPreferencesService } from './user-preferences.service';
+import { MlRankingService } from '../ml/ml-ranking.service';
+import { detectArchetype, calcVacancyFreshness, RoleArchetype } from './vacancies.utils';
+
+export { detectArchetype, calcVacancyFreshness, RoleArchetype };
 
 // Adzuna API base URL
 const ADZUNA_API = 'https://api.adzuna.com/v1/api/jobs';
-
-// Local skills extraction removed. Now using SkillsService with LLM.
-// ---------------------------------------------------------------------------
-// Archetype Detection — inspired by career-ops role classification
-// ---------------------------------------------------------------------------
-export type RoleArchetype = 'Backend' | 'Frontend' | 'Fullstack' | 'Mobile' | 'DevOps' | 'ML/Data' | 'QA' | 'Manager' | 'Unknown';
-
-export function detectArchetype(title: string, description: string): RoleArchetype {
-    const text = `${title} ${description}`.toLowerCase();
-
-    const signals: Record<RoleArchetype, string[]> = {
-        'ML/Data': ['machine learning', 'ml ', ' ml,', 'data science', 'data scientist', 'nlp', 'computer vision', 'deep learning', 'pytorch', 'tensorflow', 'sklearn', 'scikit', 'data analyst', 'аналитик данных', 'data engineer', 'etl', 'spark', 'hadoop', 'airflow', 'bigquery', 'snowflake'],
-        'DevOps': ['devops', 'sre', 'site reliability', 'kubernetes', 'k8s', 'docker', 'terraform', 'ansible', 'ci/cd', 'jenkins', 'gitlab ci', 'github actions', 'infrastructure', 'инфраструктур', 'облачн', 'cloud engineer', 'platform engineer'],
-        'Mobile': ['android', 'ios', 'swift', 'kotlin', 'react native', 'flutter', 'mobile developer', 'мобильн'],
-        'Frontend': ['frontend', 'фронтенд', 'front-end', 'react', 'vue', 'angular', 'svelte', 'next.js', 'nuxt', 'ui developer', 'web developer', 'верстальщик', 'html/css'],
-        'Backend': ['backend', 'бэкенд', 'back-end', 'node.js', 'python developer', 'java developer', 'golang', 'go developer', 'php developer', 'ruby', 'spring', 'django', 'fastapi', 'nestjs', 'серверн'],
-        'Fullstack': ['fullstack', 'full stack', 'full-stack', 'фулстек', 'full stack developer'],
-        'QA': ['qa ', 'quality assurance', 'tester', 'тестировщик', 'тестировани', 'automation qa', 'manual qa', 'sdet', 'selenium', 'cypress', 'playwright'],
-        'Manager': ['product manager', 'project manager', 'engineering manager', 'team lead', 'tech lead', 'scrum master', 'менеджер продукта', 'руководитель', 'тимлид', 'cto', 'vp of engineering'],
-        'Unknown': [],
-    };
-
-    const scores: Partial<Record<RoleArchetype, number>> = {};
-    for (const [archetype, keywords] of Object.entries(signals)) {
-        if (archetype === 'Unknown') continue;
-        let score = 0;
-        for (const kw of keywords) {
-            if (text.includes(kw)) score++;
-        }
-        if (score > 0) scores[archetype as RoleArchetype] = score;
-    }
-
-    // Fullstack check: if BOTH frontend and backend signals are strong
-    const fScore = scores['Frontend'] || 0;
-    const bScore = scores['Backend'] || 0;
-    if (fScore >= 2 && bScore >= 2) return 'Fullstack';
-    if (scores['Fullstack'] && scores['Fullstack']! >= 1) return 'Fullstack';
-
-    if (Object.keys(scores).length === 0) return 'Unknown';
-    const best = Object.entries(scores).sort(([, a], [, b]) => b - a)[0];
-    return best ? (best[0] as RoleArchetype) : 'Unknown';
-}
-
-// ---------------------------------------------------------------------------
-// Vacancy Freshness Score — returns 0-100
-// Inspired by career-ops Block G: Posting Legitimacy
-// ---------------------------------------------------------------------------
-export function calcVacancyFreshness(publishedAt: Date | null | undefined, createdAt: Date, updatedAt?: Date | null): {
-    score: number;
-    label: string;
-    daysOld: number;
-} {
-    const now = new Date();
-    const ref = publishedAt || updatedAt || createdAt;
-    const daysOld = Math.floor((now.getTime() - new Date(ref).getTime()) / (1000 * 60 * 60 * 24));
-
-    let score: number;
-    let label: string;
-
-    if (daysOld <= 3) {
-        score = 100;
-        label = 'Только что';
-    } else if (daysOld <= 7) {
-        score = 90;
-        label = 'Свежая';
-    } else if (daysOld <= 14) {
-        score = 75;
-        label = 'Активная';
-    } else if (daysOld <= 30) {
-        score = 55;
-        label = 'Может быть устаревшей';
-    } else if (daysOld <= 60) {
-        score = 30;
-        label = 'Подозрительная';
-    } else {
-        score = 10;
-        label = 'Вероятно закрытая';
-    }
-
-    return { score, label, daysOld };
-}
 
 // ---------------------------------------------------------------------------
 // Gap Analysis — returns matched/missing skills
@@ -313,6 +236,7 @@ export class VacanciesService {
         private readonly embeddingsService: EmbeddingsService,
         private readonly questionGenService: QuestionGenService,
         private readonly userPreferences: UserPreferencesService,
+        private readonly mlRanking: MlRankingService,
     ) { }
 
     /**
@@ -517,6 +441,25 @@ export class VacanciesService {
                     modelVersion: 'rule-based-v1',
                 })),
             }).catch((e: any) => this.logger.warn(`[Impression] Log failed: ${e.message}`));
+
+            // ── ML shadow mode ────────────────────────────────────────────────────
+            // Call ml-service for comparison logging. In shadow mode, scores are
+            // not applied — rule-based order is returned. Flip ML_SHADOW_MODE=false
+            // to switch to ML ranking after validating metrics.
+            if (this.mlRanking.isEnabled()) {
+                const ruleTop3 = reranked.slice(0, 3).map((v: any) => v.id).join(',');
+                this.mlRanking.rank(profileId, reranked, prefs).then(mlScores => {
+                    if (mlScores.size > 0) {
+                        const mlTop3 = [...reranked]
+                            .sort((a: any, b: any) => (mlScores.get(b.id) || 0) - (mlScores.get(a.id) || 0))
+                            .slice(0, 3)
+                            .map((v: any) => v.id)
+                            .join(',');
+                        this.logger.log(`[ML Shadow] rule-based TOP-3: ${ruleTop3} | ml TOP-3: ${mlTop3}`);
+                    }
+                }).catch(() => { /* non-critical */ });
+            }
+            // ────────────────────────────────────────────────────────────────────
 
             return reranked;
         }

@@ -11,6 +11,7 @@ import { EmbeddingsService } from '../ai/embeddings/embeddings.service';
 import { QuestionGenService } from '../interviews/question-gen/question-gen.service';
 import { UserPreferencesService } from './user-preferences.service';
 import { RedisService } from '../redis/redis.service';
+import { MlRankingService } from '../ml/ml-ranking.service';
 
 // ──────────────────────────────── mock data ──────────────────────────────────
 const mockVacancy = {
@@ -99,10 +100,16 @@ const makeQuestionGenService = () => ({
 });
 
 const makeUserPreferences = () => ({
-    compute: jest.fn().mockResolvedValue({ archetype: {}, salary_band: {}, work_format: {} }),
-    extractVacancyFeatures: jest.fn().mockReturnValue({ archetype: {}, salary_band: {}, work_format: {} }),
+    compute: jest.fn().mockResolvedValue({ archetype: {}, salary_band: {}, work_format: {}, seniority: {} }),
+    extractVacancyFeatures: jest.fn().mockReturnValue({ archetype: {}, salary_band: {}, work_format: {}, seniority: {} }),
     computePersonalScore: jest.fn().mockReturnValue(0),
     invalidateCache: jest.fn().mockResolvedValue(undefined),
+});
+
+const makeMlRanking = () => ({
+    isEnabled: jest.fn().mockReturnValue(false),
+    isShadowMode: jest.fn().mockReturnValue(true),
+    rank: jest.fn().mockResolvedValue(new Map()),
 });
 
 const makeRedis = () => ({
@@ -149,6 +156,7 @@ describe('VacanciesService', () => {
                 { provide: QuestionGenService, useValue: makeQuestionGenService() },
                 { provide: UserPreferencesService, useValue: makeUserPreferences() },
                 { provide: RedisService, useValue: makeRedis() },
+                { provide: MlRankingService, useValue: makeMlRanking() },
             ],
         }).compile();
 
@@ -310,6 +318,7 @@ describe('VacanciesService', () => {
                     { provide: QuestionGenService, useValue: makeQuestionGenService() },
                     { provide: UserPreferencesService, useValue: makeUserPreferences() },
                     { provide: RedisService, useValue: makeRedis() },
+                    { provide: MlRankingService, useValue: makeMlRanking() },
                 ],
             }).compile();
 

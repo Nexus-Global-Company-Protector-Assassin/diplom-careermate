@@ -1,18 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
-import { detectArchetype } from './vacancies.service';
+import { detectArchetype } from './vacancies.utils';
 
 export interface PreferenceVector {
     archetype: Record<string, number>;
     salary_band: Record<string, number>;
     work_format: Record<string, number>;
+    seniority: Record<string, number>;
 }
 
 export interface VacancyFeatures {
     archetype: Record<string, number>;
     salary_band: Record<string, number>;
     work_format: Record<string, number>;
+    seniority: Record<string, number>;
 }
 
 const WEIGHTS: Record<string, number> = { analyze: 4, apply: 5, favorite: 3, click: 1, dismiss: -6 };
@@ -50,20 +52,17 @@ export class UserPreferencesService {
             take: 200,
         });
 
-        const raw: PreferenceVector = { archetype: {}, salary_band: {}, work_format: {} };
+        const raw: PreferenceVector = { archetype: {}, salary_band: {}, work_format: {}, seniority: {} };
 
         for (const i of interactions) {
             if (!i.vacancy) continue;
             const w = this.decayedWeight(i.type, i.createdAt);
             const features = this.extractVacancyFeatures(i.vacancy);
-            for (const [k, v] of Object.entries(features.archetype)) {
-                raw.archetype[k] = (raw.archetype[k] || 0) + w * v;
-            }
-            for (const [k, v] of Object.entries(features.salary_band)) {
-                raw.salary_band[k] = (raw.salary_band[k] || 0) + w * v;
-            }
-            for (const [k, v] of Object.entries(features.work_format)) {
-                raw.work_format[k] = (raw.work_format[k] || 0) + w * v;
+            const dims: Array<keyof PreferenceVector> = ['archetype', 'salary_band', 'work_format', 'seniority'];
+            for (const dim of dims) {
+                for (const [k, v] of Object.entries(features[dim])) {
+                    raw[dim][k] = (raw[dim][k] || 0) + w * v;
+                }
             }
         }
 
@@ -71,6 +70,7 @@ export class UserPreferencesService {
             archetype: this.softmaxPositive(raw.archetype),
             salary_band: this.softmaxPositive(raw.salary_band),
             work_format: this.softmaxPositive(raw.work_format),
+            seniority: this.softmaxPositive(raw.seniority),
         };
 
         try {
@@ -88,7 +88,7 @@ export class UserPreferencesService {
         schedule?: string | null;
         location?: string | null;
     }): VacancyFeatures {
-        const features: VacancyFeatures = { archetype: {}, salary_band: {}, work_format: {} };
+        const features: VacancyFeatures = { archetype: {}, salary_band: {}, work_format: {}, seniority: {} };
 
         const arch = detectArchetype(vacancy.title || '', vacancy.descriptionPreview || '');
         if (arch !== 'Unknown') features.archetype[arch] = 1;
@@ -110,11 +110,23 @@ export class UserPreferencesService {
             features.work_format[isRemote ? 'remote' : 'onsite'] = 1;
         }
 
+        const sen = this.extractSeniority(vacancy.title || '');
+        if (sen) features.seniority[sen] = 1;
+
         return features;
     }
 
+    extractSeniority(title: string): string | null {
+        const t = title.toLowerCase();
+        if (/junior|джуниор|intern|стажер|trainee/.test(t)) return 'junior';
+        if (/middle|мидл/.test(t)) return 'mid';
+        if (/senior|сеньор|старший/.test(t)) return 'senior';
+        if (/lead|лид|principal|director/.test(t)) return 'lead';
+        return null;
+    }
+
     computePersonalScore(prefs: PreferenceVector, features: VacancyFeatures): number {
-        const dims: Array<keyof PreferenceVector> = ['archetype', 'salary_band', 'work_format'];
+        const dims: Array<keyof PreferenceVector> = ['archetype', 'salary_band', 'work_format', 'seniority'];
         const scores: number[] = [];
         for (const dim of dims) {
             if (Object.keys(features[dim]).length === 0 || Object.keys(prefs[dim]).length === 0) continue;
