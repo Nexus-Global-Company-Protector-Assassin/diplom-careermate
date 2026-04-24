@@ -469,7 +469,7 @@ export class VacanciesService {
 
                 // Hybrid score: 60% keyword match + 40% semantic similarity
                 const semanticScore = semanticRank.get(v.id) ?? 0;
-                const combinedScore = 0.6 * (matchScore / 100) + 0.4 * semanticScore;
+                const combinedScore = 0.5 * (matchScore / 100) + 0.3 * semanticScore;
 
                 return { ...v, matchScore, matchReasons, archetype, ...gap, freshness, semanticScore, combinedScore };
             })
@@ -477,49 +477,50 @@ export class VacanciesService {
             .sort((a: any, b: any) => b.combinedScore - a.combinedScore)
             .slice(0, limit * 2); // fetch wider set before behavioral filter
 
-        // ── Behavioral re-ranking ─────────────────────────────────────────────
-        const profile = await this.prisma.profile.findFirst({ select: { id: true } });
-        if (profile) {
-            const interactions = await this.prisma.vacancyInteraction.findMany({
-                where: { profileId: profile.id },
-                orderBy: { createdAt: 'desc' },
-                take: 100,
-            });
+        // ── Behavioral re-ranking ────────────────────────────────────────────────
+        const profile = userId
+            ? await this.prisma.profile.findFirst({ where: { userId }, select: { id: true } })
+            : null;
+        const profileId = profile?.id;
 
-            const dismissedIds = new Set(
-                interactions.filter(i => i.type === 'dismiss').map(i => i.vacancyId),
-            );
-            const positiveIds = [...new Set(
-                interactions
-                    .filter(i => ['click', 'apply', 'favorite', 'analyze'].includes(i.type))
-                    .map(i => i.vacancyId),
-            )];
+        if (profileId) {
+            const [prefs, dismissed] = await Promise.all([
+                this.userPreferences.compute(profileId),
+                this.prisma.vacancyInteraction.findMany({
+                    where: { profileId, type: 'dismiss' },
+                    select: { vacancyId: true },
+                }),
+            ]);
 
-            // Derive preferred archetypes from positively interacted vacancies
-            const preferredArchetypes = new Set<string>();
-            if (positiveIds.length > 0) {
-                const posVacancies = await this.prisma.vacancy.findMany({
-                    where: { id: { in: positiveIds } },
-                    select: { title: true, descriptionPreview: true },
-                });
-                for (const v of posVacancies) {
-                    const arch = detectArchetype(v.title, v.descriptionPreview ?? '');
-                    if (arch !== 'Unknown') preferredArchetypes.add(arch);
-                }
-            }
+            const dismissedIds = new Set(dismissed.map(i => i.vacancyId));
 
             const reranked = ranked
                 .filter((v: any) => !dismissedIds.has(v.id))
                 .map((v: any) => {
-                    const behaviorBoost = preferredArchetypes.size > 0 && preferredArchetypes.has(v.archetype) ? 1.2 : 1.0;
-                    return { ...v, combinedScore: v.combinedScore * behaviorBoost };
+                    const features = this.userPreferences.extractVacancyFeatures(v);
+                    const personalScore = this.userPreferences.computePersonalScore(prefs, features);
+                    return {
+                        ...v,
+                        personalScore,
+                        combinedScore: 0.5 * (v.matchScore / 100) + 0.3 * v.semanticScore + 0.2 * personalScore,
+                    };
                 })
                 .sort((a: any, b: any) => b.combinedScore - a.combinedScore)
                 .slice(0, limit);
 
+            this.prisma.recommendationImpression.createMany({
+                data: reranked.map((v: any, idx: number) => ({
+                    profileId,
+                    vacancyId: v.id,
+                    position: idx + 1,
+                    score: v.combinedScore,
+                    modelVersion: 'rule-based-v1',
+                })),
+            }).catch((e: any) => this.logger.warn(`[Impression] Log failed: ${e.message}`));
+
             return reranked;
         }
-        // ─────────────────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────────
 
         return ranked.slice(0, limit);
     }

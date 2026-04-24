@@ -382,4 +382,72 @@ describe('VacanciesService', () => {
             expect(userPrefs.invalidateCache).toHaveBeenCalledWith('profile-uuid-1');
         });
     });
+
+    // ──────────────────────── getRecommendedForProfile ───────────────────────
+    describe('getRecommendedForProfile', () => {
+        const makeVacancy = (overrides: Partial<any> = {}): any => ({
+            id: 'vac-1',
+            hhId: 'hh-1',
+            title: 'Backend Developer',
+            employer: 'Acme',
+            location: 'London',
+            salaryFrom: 50000,
+            salaryTo: 60000,
+            salaryCurrency: 'GBP',
+            salaryLabel: '50k-60k £',
+            skills: ['node.js', 'typescript'],
+            descriptionPreview: 'We need a backend developer with node.js experience.',
+            schedule: 'Полная занятость',
+            searchQuery: 'Backend Developer',
+            publishedAt: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            ...overrides,
+        });
+
+        beforeEach(() => {
+            prisma.vacancy.findMany.mockResolvedValue([makeVacancy()]);
+            prisma.vacancy.count.mockResolvedValue(10);
+        });
+
+        it('returns empty array when no vacancies match', async () => {
+            prisma.vacancy.findMany.mockResolvedValue([]);
+            const result = await service.getRecommendedForProfile('Backend', [], 10, undefined, 'user-1');
+            expect(Array.isArray(result)).toBe(true);
+        });
+
+        it('looks up profile by userId, not by findFirst without filter', async () => {
+            await service.getRecommendedForProfile('Backend', [], 10, undefined, 'user-1');
+            expect(prisma.profile.findFirst).toHaveBeenCalledWith(
+                expect.objectContaining({ where: { userId: 'user-1' } }),
+            );
+        });
+
+        it('calls userPreferences.compute with the resolved profileId', async () => {
+            prisma.profile.findFirst.mockResolvedValue({ id: 'profile-uuid-1' });
+            const userPrefs = (service as any).userPreferences;
+            await service.getRecommendedForProfile('Backend', [], 10, undefined, 'user-1');
+            expect(userPrefs.compute).toHaveBeenCalledWith('profile-uuid-1');
+        });
+
+        it('logs RecommendationImpression non-blockingly after returning results', async () => {
+            prisma.profile.findFirst.mockResolvedValue({ id: 'profile-uuid-1' });
+            prisma.vacancyInteraction.findMany.mockResolvedValue([]);
+            await service.getRecommendedForProfile('Backend', [], 10, undefined, 'user-1');
+            await new Promise(r => setImmediate(r));
+            expect(prisma.recommendationImpression.createMany).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.arrayContaining([
+                        expect.objectContaining({ profileId: 'profile-uuid-1', modelVersion: 'rule-based-v1' }),
+                    ]),
+                }),
+            );
+        });
+
+        it('skips impression logging when no userId provided', async () => {
+            await service.getRecommendedForProfile('Backend', [], 10);
+            await new Promise(r => setImmediate(r));
+            expect(prisma.recommendationImpression.createMany).not.toHaveBeenCalled();
+        });
+    });
 });
