@@ -7,6 +7,8 @@ import { SkillsService } from '../skills/skills.service';
 import { QuestionGenService } from '../interviews/question-gen/question-gen.service';
 import { EmbeddingsService } from '../ai/embeddings/embeddings.service';
 import { VacanciesService } from './vacancies.service';
+import { UserPreferencesService } from './user-preferences.service';
+import { RedisService } from '../redis/redis.service';
 
 describe('VacanciesService interviewPrep', () => {
     let service: VacanciesService;
@@ -41,6 +43,8 @@ describe('VacanciesService interviewPrep', () => {
                 { provide: SkillsService, useValue: { extractFromText: jest.fn(), syncVacancySkills: jest.fn() } },
                 { provide: EmbeddingsService, useValue: { indexVacancy: jest.fn(), searchSimilar: jest.fn().mockResolvedValue([]) } },
                 { provide: QuestionGenService, useValue: questionGenService },
+                { provide: UserPreferencesService, useValue: { compute: jest.fn(), extractVacancyFeatures: jest.fn(), computePersonalScore: jest.fn().mockReturnValue(0), invalidateCache: jest.fn() } },
+                { provide: RedisService, useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() } },
             ],
         }).compile();
 
