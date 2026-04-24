@@ -103,10 +103,12 @@ export class UserPreferencesService {
 
         const sched = (vacancy.schedule || '').toLowerCase();
         const loc = (vacancy.location || '').toLowerCase();
-        const isRemote =
-            sched.includes('удал') || sched.includes('remote') ||
-            loc.includes('удал') || loc.includes('remote');
-        features.work_format[isRemote ? 'remote' : 'onsite'] = 1;
+        if (sched || loc) {
+            const isRemote =
+                sched.includes('удал') || sched.includes('remote') ||
+                loc.includes('удал') || loc.includes('remote');
+            features.work_format[isRemote ? 'remote' : 'onsite'] = 1;
+        }
 
         return features;
     }

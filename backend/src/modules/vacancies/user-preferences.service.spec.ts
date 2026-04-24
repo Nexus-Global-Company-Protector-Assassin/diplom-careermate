@@ -101,6 +101,11 @@ describe('UserPreferencesService', () => {
             const f = service.extractVacancyFeatures({ schedule: 'Полная занятость', location: 'Москва' });
             expect(f.work_format).toEqual({ onsite: 1 });
         });
+
+        it('returns empty work_format when both schedule and location are null', () => {
+            const f = service.extractVacancyFeatures({ schedule: null, location: null });
+            expect(Object.keys(f.work_format)).toHaveLength(0);
+        });
     });
 
     // ─── computePersonalScore ─────────────────────────────────────────────
@@ -150,6 +155,13 @@ describe('UserPreferencesService', () => {
             prisma.vacancyInteraction.findMany.mockResolvedValue([makeInteraction()]);
             await service.compute('profile-1');
             expect(redis.set).toHaveBeenCalledWith('prefs:v1:profile-1', expect.any(String), 3600);
+        });
+
+        it('queries at most 200 interactions ordered by createdAt desc', async () => {
+            await service.compute('profile-1');
+            expect(prisma.vacancyInteraction.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({ take: 200, orderBy: { createdAt: 'desc' } }),
+            );
         });
 
         it('recent interactions dominate over old ones after decay', async () => {
