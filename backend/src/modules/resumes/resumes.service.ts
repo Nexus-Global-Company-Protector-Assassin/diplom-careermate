@@ -1,12 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { AiService } from '../ai/ai.service';
 
 @Injectable()
 export class ResumesService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly storage: StorageService,
+        private readonly aiService: AiService,
     ) {}
 
     private async getProfileId() {
@@ -59,26 +61,27 @@ export class ResumesService {
     }
 
     async generateCoverLetter(company: string, position: string, keyPoints?: string, profile?: any) {
-        const name = profile?.fullName || "Пользователь";
-        const email = profile?.aboutMe?.match(/Email:\s*(.*)/)?.[1] || "user@example.com";
-        const phone = profile?.phone || "+7 (000) 000-00-00";
+        const vacancy = {
+            title: position,
+            employer: company,
+            descriptionPreview: keyPoints || '',
+            skills: [],
+            salaryLabel: '',
+            schedule: '',
+            location: '',
+        };
 
-        const text = `Уважаемый HR-менеджер компании ${company}!
+        const resumeContent = profile
+            ? [
+                profile.fullName ? `Имя: ${profile.fullName}` : '',
+                profile.desiredPosition ? `Желаемая позиция: ${profile.desiredPosition}` : '',
+                profile.aboutMe ? `О себе: ${profile.aboutMe}` : '',
+                profile.skills?.length ? `Навыки: ${Array.isArray(profile.skills) ? profile.skills.join(', ') : profile.skills}` : '',
+                keyPoints ? `Ключевые моменты: ${keyPoints}` : '',
+            ].filter(Boolean).join('\n')
+            : `Кандидат на позицию ${position}${keyPoints ? `\nКлючевые моменты: ${keyPoints}` : ''}`;
 
-Я с большим интересом ознакомился с вакансией "${position}" и хотел бы предложить свою кандидатуру на данную позицию.
-
-Имея глубокий опыт и релевантные навыки, я уверен, что смогу внести значительный вклад в развитие вашей команды.
-
-Мои ключевые компетенции отлично совпадают с вашими требованиями.
-
-${keyPoints ? `\nДополнительно хочу отметить: ${keyPoints}\n` : ""}
-Буду рад возможности обсудить, как мой опыт может быть полезен для ${company}. Готов предоставить дополнительную информацию и ответить на любые вопросы.
-
-(Сгенерировано бэкендом)
-
-С уважением,
-${name}
-${email} | ${phone}`;
+        const { coverLetter } = await this.aiService.generateCoverLetter(vacancy, resumeContent, 'ru');
 
         try {
             const profileId = await this.getProfileId();
@@ -87,16 +90,16 @@ ${email} | ${phone}`;
                     profileId,
                     title: `Сопроводительное: ${company}`,
                     subtitle: `Позиция: ${position}`,
-                    content: text,
+                    content: coverLetter,
                     type: 'cover_letter',
-                    status: 'draft'
-                }
+                    status: 'draft',
+                },
             });
-        } catch (e) {
+        } catch {
             // ignore if no profile
         }
 
-        return text;
+        return coverLetter;
     }
 
     async saveResume(title: string, subtitle?: string, content?: string, type: string = 'resume', reviewData?: any) {

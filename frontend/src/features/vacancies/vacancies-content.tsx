@@ -29,7 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/shared/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select"
 import { Checkbox } from "@/shared/ui/checkbox"
-import { useRecommendedVacancies, useApplyToVacancy, useToggleFavorite, useAdzunaVacancies, useAdzunaParse, useEvaluateVacancy, useInterviewPrep, useGenerateCoverLetter, Vacancy, VacancySearchFilters } from "./api/use-vacancies"
+import { useRecommendedVacancies, useApplyToVacancy, useToggleFavorite, useAdzunaVacancies, useAdzunaParse, useEvaluateVacancy, useInterviewPrep, useGenerateCoverLetter, useTrackInteraction, Vacancy, VacancySearchFilters } from "./api/use-vacancies"
 import { useResumesHistory } from "@/features/resume/api/use-resumes"
 import { useProfile } from "@/features/profile/api/use-profile"
 
@@ -53,6 +53,7 @@ interface Job {
   archetype?: string
   matchedSkills?: string[]
   missingSkills?: string[]
+  matchReasons?: string[]
   freshnessScore?: number | null
   freshnessLabel?: string | null
   daysOld?: number | null
@@ -87,6 +88,7 @@ export function VacanciesContent() {
   )
   const { mutate: applyToJob } = useApplyToVacancy()
   const { mutate: toggleFavApi } = useToggleFavorite()
+  const { mutate: trackInteraction } = useTrackInteraction()
 
   const [jobs, setJobs] = useState<Job[]>([])
   const [favorites, setFavorites] = useState<string[]>([])
@@ -97,6 +99,7 @@ export function VacanciesContent() {
   const [applyModalOpen, setApplyModalOpen] = useState(false)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [appliedJobs, setAppliedJobs] = useState<string[]>([])
+  const [dismissedJobs, setDismissedJobs] = useState<Set<string>>(new Set())
   const [selectedResumeId, setSelectedResumeId] = useState<string>("")
 
   // Cover letter states
@@ -318,6 +321,7 @@ export function VacanciesContent() {
           archetype: v.archetype,
           matchedSkills: v.matchedSkills,
           missingSkills: v.missingSkills,
+          matchReasons: (v as any).matchReasons,
           freshnessScore: v.freshnessScore,
           freshnessLabel: v.freshnessLabel,
           daysOld: v.daysOld,
@@ -344,9 +348,16 @@ export function VacanciesContent() {
     const isFav = !favorites.includes(id)
     setFavorites((prev) => (isFav ? [...prev, id] : prev.filter((f) => f !== id)))
     toggleFavApi({ vacancyId: id, isFavorite: isFav })
+    if (isFav) trackInteraction({ vacancyId: id, type: 'favorite' })
+  }
+
+  const handleDismiss = (id: string) => {
+    setDismissedJobs(prev => new Set([...prev, id]))
+    trackInteraction({ vacancyId: id, type: 'dismiss' })
   }
 
   const handleApply = async (job: Job) => {
+    trackInteraction({ vacancyId: job.id, type: 'apply' })
     setSelectedJob(job)
     setCoverLetter("")
     setCoverLetterNoResume(false)
@@ -409,6 +420,7 @@ export function VacanciesContent() {
   }
 
   const handleAnalyze = async (job: Job) => {
+    trackInteraction({ vacancyId: job.id, type: 'analyze' })
     setAnalyzingJob(job)
     setAnalysisResult(null)
     setAnalysisModalOpen(true)
@@ -421,6 +433,7 @@ export function VacanciesContent() {
   }
 
   const handleInterviewPrep = async (job: Job) => {
+    trackInteraction({ vacancyId: job.id, type: 'click' })
     setInterviewJob(job)
     setInterviewResult(null)
     setInterviewModalOpen(true)
@@ -447,9 +460,11 @@ export function VacanciesContent() {
 
   const filteredJobs = jobs.filter(
     (job) =>
-      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.skills.some((skill) => skill.toLowerCase().includes(searchQuery.toLowerCase())),
+      !dismissedJobs.has(job.id) && (
+        job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.skills.some((skill) => skill.toLowerCase().includes(searchQuery.toLowerCase()))
+      ),
   )
 
   return (
@@ -658,6 +673,25 @@ export function VacanciesContent() {
                         )}
                       </div>
                       <p className="font-semibold mt-2 text-card-foreground">{job.salary}</p>
+                      {job.matchReasons && job.matchReasons.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {job.matchReasons.map((reason, ri) => {
+                            const isNegative = reason.startsWith('Нет в профиле') || reason.startsWith('Должность не')
+                            return (
+                              <span
+                                key={ri}
+                                className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
+                                  isNegative
+                                    ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                                    : 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                }`}
+                              >
+                                {isNegative ? '✗' : '✓'} {reason}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
                       {job.url && (
                         <a
                           href={job.url}
@@ -670,8 +704,15 @@ export function VacanciesContent() {
                       )}
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
+                  <div className="flex flex-col items-end gap-2 shrink-0">
                     <Badge className={job.matchColor}>{job.match} match</Badge>
+                    <button
+                      onClick={() => handleDismiss(job.id)}
+                      title="Не интересует"
+                      className="text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
+                    >
+                      <X className="h-3 w-3" /> Не интересует
+                    </button>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 sm:gap-3 mt-4">

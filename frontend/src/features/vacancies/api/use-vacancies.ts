@@ -47,6 +47,7 @@ export interface RecommendedJob {
   archetype?: string;
   matchedSkills?: string[];
   missingSkills?: string[];
+  matchReasons?: string[];
   freshnessScore?: number | null;
   freshnessLabel?: string | null;
   daysOld?: number | null;
@@ -175,6 +176,13 @@ export const useGenerateCoverLetter = () => {
       const qs = params.toString() ? `?${params.toString()}` : '';
       return api.get<{ coverLetter: string } | { noResume: true }>(`/vacancies/${vacancyId}/cover-letter${qs}`);
     },
+  });
+};
+
+export const useTrackInteraction = () => {
+  return useMutation({
+    mutationFn: ({ vacancyId, type }: { vacancyId: string; type: 'click' | 'apply' | 'favorite' | 'analyze' | 'dismiss' }) =>
+      api.post<void>(`/vacancies/${vacancyId}/interaction`, { type }),
   });
 };
 

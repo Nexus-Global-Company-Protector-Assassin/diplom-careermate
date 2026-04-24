@@ -140,8 +140,13 @@ function analyzeSkillGap(
 }
 
 // ---------------------------------------------------------------------------
-// Match calculation — returns 0-100 (6-component, career-ops inspired)
+// Match calculation — returns score + human-readable reasons
 // ---------------------------------------------------------------------------
+export interface MatchResult {
+    score: number;
+    reasons: string[];
+}
+
 function calcMatch(
     vTitle: string,
     vSkills: string[],
@@ -153,7 +158,7 @@ function calcMatch(
     dPos: string,
     pSkills: string[],
     pSalary: number | null | undefined
-): number {
+): MatchResult {
     const W_ROLE = 0.25; const W_SKILLS = 0.30; const W_SENIORITY = 0.15;
     const W_SALARY = 0.15; const W_DESC = 0.05; const W_ARCHETYPE = 0.10;
     
@@ -251,7 +256,25 @@ function calcMatch(
     if (seniorityScore <= 15)  finalScore *= 0.65;
     if (archetypeScore <= 20 && desiredArchetype !== 'Unknown') finalScore *= 0.80;
 
-    return Math.max(0, Math.min(100, Math.round(finalScore)));
+    const score = Math.max(0, Math.min(100, Math.round(finalScore)));
+
+    // Build human-readable reasons
+    const reasons: string[] = [];
+    if (roleScore >= 70) reasons.push('Должность совпадает');
+    else if (roleScore <= 8) reasons.push('Должность не совпадает');
+
+    const gap2 = analyzeSkillGap(vSkills, (vDesc || '').toLowerCase(), pSkills);
+    if (gap2.matchedSkills.length > 0) {
+        reasons.push(`Навыки совпадают: ${gap2.matchedSkills.slice(0, 3).join(', ')}`);
+    }
+    if (gap2.missingSkills.length > 0) {
+        reasons.push(`Нет в профиле: ${gap2.missingSkills.slice(0, 3).join(', ')}`);
+    }
+    if (seniorityScore >= 70) reasons.push('Уровень совпадает');
+    if (salaryScore >= 80) reasons.push('Зарплата соответствует ожиданиям');
+    if (archetypeScore === 100) reasons.push(`Тип роли совпадает (${vacancyArchetype})`);
+
+    return { score, reasons };
 }
 
 
@@ -413,16 +436,18 @@ export class VacanciesService {
                 const skills = Array.isArray(v.skills) ? (v.skills as string[]) : [];
                 const desc = v.descriptionPreview || '';
 
-                const matchScore = calcMatch(
+                const matchResult = calcMatch(
                     v.title, skills, desc,
                     v.salaryFrom, v.salaryTo, v.salaryCurrency, v.salaryLabel,
                     position, profileSkills, salary
                 );
+                const matchScore = matchResult.score;
+                const matchReasons = matchResult.reasons;
 
                 // Archetype detection (career-ops inspired)
                 const archetype = detectArchetype(v.title, desc);
 
-                // Gap analysis — matched vs missing skills
+                // Gap analysis — matched vs missing skills (reuse from calcMatch result)
                 const normalise = (s: string) => s.toLowerCase().trim();
                 const vSkillsNorm = skills.map(normalise);
                 const gap = (function () {
@@ -443,13 +468,79 @@ export class VacanciesService {
                 const semanticScore = semanticRank.get(v.id) ?? 0;
                 const combinedScore = 0.6 * (matchScore / 100) + 0.4 * semanticScore;
 
-                return { ...v, matchScore, archetype, ...gap, freshness, semanticScore, combinedScore };
+                return { ...v, matchScore, matchReasons, archetype, ...gap, freshness, semanticScore, combinedScore };
             })
             .filter((v: any) => v.matchScore > 20 || v.semanticScore > 0.3)
             .sort((a: any, b: any) => b.combinedScore - a.combinedScore)
-            .slice(0, limit);
+            .slice(0, limit * 2); // fetch wider set before behavioral filter
 
-        return ranked;
+        // ── Behavioral re-ranking ─────────────────────────────────────────────
+        const profile = await this.prisma.profile.findFirst({ select: { id: true } });
+        if (profile) {
+            const interactions = await this.prisma.vacancyInteraction.findMany({
+                where: { profileId: profile.id },
+                orderBy: { createdAt: 'desc' },
+                take: 100,
+            });
+
+            const dismissedIds = new Set(
+                interactions.filter(i => i.type === 'dismiss').map(i => i.vacancyId),
+            );
+            const positiveIds = [...new Set(
+                interactions
+                    .filter(i => ['click', 'apply', 'favorite', 'analyze'].includes(i.type))
+                    .map(i => i.vacancyId),
+            )];
+
+            // Derive preferred archetypes from positively interacted vacancies
+            const preferredArchetypes = new Set<string>();
+            if (positiveIds.length > 0) {
+                const posVacancies = await this.prisma.vacancy.findMany({
+                    where: { id: { in: positiveIds } },
+                    select: { title: true, descriptionPreview: true },
+                });
+                for (const v of posVacancies) {
+                    const arch = detectArchetype(v.title, v.descriptionPreview ?? '');
+                    if (arch !== 'Unknown') preferredArchetypes.add(arch);
+                }
+            }
+
+            const reranked = ranked
+                .filter((v: any) => !dismissedIds.has(v.id))
+                .map((v: any) => {
+                    const behaviorBoost = preferredArchetypes.size > 0 && preferredArchetypes.has(v.archetype) ? 1.2 : 1.0;
+                    return { ...v, combinedScore: v.combinedScore * behaviorBoost };
+                })
+                .sort((a: any, b: any) => b.combinedScore - a.combinedScore)
+                .slice(0, limit);
+
+            return reranked;
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        return ranked.slice(0, limit);
+    }
+
+    /**
+     * Record a behavioral interaction signal (click/apply/favorite/analyze/dismiss).
+     * Uses upsert to avoid duplicate rows — re-interactions refresh the timestamp.
+     */
+    async recordInteraction(vacancyId: string, type: string): Promise<void> {
+        const allowed = ['click', 'apply', 'favorite', 'analyze', 'dismiss'];
+        if (!allowed.includes(type)) return;
+
+        const profile = await this.prisma.profile.findFirst({ select: { id: true } });
+        if (!profile) return;
+
+        await this.prisma.vacancyInteraction.upsert({
+            where: {
+                profileId_vacancyId_type: { profileId: profile.id, vacancyId, type },
+            },
+            create: { profileId: profile.id, vacancyId, type },
+            update: { createdAt: new Date() },
+        });
+
+        this.logger.log(`[Interaction] type=${type} vacancy=${vacancyId}`);
     }
 
     /**

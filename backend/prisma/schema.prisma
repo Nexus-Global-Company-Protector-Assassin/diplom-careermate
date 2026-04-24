@@ -42,19 +42,23 @@ model Profile {
   workExperience      Json?
   skills              Json?
   languages           Json?
-  aboutMe             String?
-  careerGoals         String?
+  aboutMe                   String?
+  careerGoals               String?
+  workFormatPreference      String?   // "remote" | "hybrid" | "onsite"
+  companyTypePreference     String?   // "startup" | "scaleup" | "enterprise" | "agency" | "product"
+  managementStylePreference String?   // "flat" | "structured" | "autonomous" | "mentorship"
   linkedinUrl         String?
   githubUrl           String?
   portfolioUrl        String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  analysisResults     AnalysisResult[]
-  resumes             Resume[]
-  interviews          Interview[]
-  vacancyResponses    VacancyResponse[]
-  profileSkills       ProfileSkill[]
+  analysisResults       AnalysisResult[]
+  resumes               Resume[]
+  interviews            Interview[]
+  vacancyResponses      VacancyResponse[]
+  profileSkills         ProfileSkill[]
+  vacancyInteractions   VacancyInteraction[]
 }
 
 model AnalysisResult {
@@ -124,12 +128,29 @@ model Vacancy {
   experience         String?
   schedule           String?
   url                String?  // Ссылка на оригинальную вакансию
-  searchQuery        String   // Поисковый запрос, по которому найдена вакансия
+  searchQuery        String   // Поисковый запрос, по которому найдена вакансию на площадке
   publishedAt        DateTime? // Дата публикации вакансии на площадке
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   vacancySkills      VacancySkill[]
+  interactions       VacancyInteraction[]
+}
+
+// Behavioral signals — tracks candidate interactions with vacancies
+model VacancyInteraction {
+  id          String   @id @default(uuid())
+  profileId   String
+  vacancyId   String
+  // click | apply | favorite | analyze | dismiss
+  type        String
+  createdAt   DateTime @default(now())
+
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  vacancy     Vacancy  @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, vacancyId, type])
+  @@index([profileId, type])
 }
 
 // ---------------------------------------------------------------------------

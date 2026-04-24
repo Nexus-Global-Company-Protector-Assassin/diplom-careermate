@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Query, Body, Param, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { VacanciesService } from './vacancies.service';
 
@@ -82,10 +82,10 @@ export class VacanciesController {
                     : 'text-orange-700 bg-orange-100 dark:text-orange-400 dark:bg-orange-900/30',
             logo: (v.employer || 'X')[0].toUpperCase(),
             url: v.url || null,
-            // NEW: Archetype, Gap Analysis, Ghost Job freshness
             archetype: v.archetype || 'Unknown',
             matchedSkills: v.matchedSkills || [],
             missingSkills: v.missingSkills || [],
+            matchReasons: v.matchReasons || [],
             freshnessScore: v.freshness?.score ?? null,
             freshnessLabel: v.freshness?.label ?? null,
             daysOld: v.freshness?.daysOld ?? null,
@@ -100,6 +100,17 @@ export class VacanciesController {
         if (diff < 7) return `${diff} дней назад`;
         if (diff < 30) return `${Math.floor(diff / 7)} нед. назад`;
         return `${Math.floor(diff / 30)} мес. назад`;
+    }
+
+    @Post(':id/interaction')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @ApiOperation({ summary: 'Record behavioral interaction signal for a vacancy' })
+    @ApiParam({ name: 'id', description: 'Vacancy ID' })
+    async trackInteraction(
+        @Param('id') vacancyId: string,
+        @Body() body: { type: string },
+    ): Promise<void> {
+        await this.vacanciesService.recordInteraction(vacancyId, body.type);
     }
 
     @Get('responses')

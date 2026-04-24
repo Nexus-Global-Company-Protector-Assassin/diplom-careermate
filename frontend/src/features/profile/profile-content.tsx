@@ -4,11 +4,13 @@ import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
+import { Textarea } from "@/shared/ui/textarea"
 import { Label } from "@/shared/ui/label"
-import { User, Briefcase, GraduationCap, Wrench, X, Plus, Trash2, Upload, Loader2, Sparkles } from "lucide-react"
+import { User, Briefcase, GraduationCap, Wrench, X, Plus, Trash2, Upload, Loader2, Sparkles, Settings2 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/shared/ui/command"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select"
 import { useRouter } from "next/navigation"
 import { useRunPoc } from "@/features/poc/api/use-run-poc"
 import { useUploadResume } from "@/features/profile/api/use-upload-resume"
@@ -33,6 +35,7 @@ interface WorkExperience {
   position: string
   company: string
   period: string
+  description: string
 }
 
 interface Education {
@@ -46,6 +49,33 @@ interface Skills {
   technical: string[]
   professional: string[]
 }
+
+interface Preferences {
+  workFormat: string
+  companyType: string
+  managementStyle: string
+}
+
+const WORK_FORMAT_OPTIONS = [
+  { value: 'remote', label: 'Удалённо' },
+  { value: 'hybrid', label: 'Гибрид' },
+  { value: 'onsite', label: 'В офисе' },
+]
+
+const COMPANY_TYPE_OPTIONS = [
+  { value: 'startup', label: 'Стартап' },
+  { value: 'scaleup', label: 'Scale-up' },
+  { value: 'enterprise', label: 'Корпорация' },
+  { value: 'agency', label: 'Агентство' },
+  { value: 'product', label: 'Продуктовая компания' },
+]
+
+const MANAGEMENT_STYLE_OPTIONS = [
+  { value: 'flat', label: 'Плоская иерархия' },
+  { value: 'structured', label: 'Структурированная' },
+  { value: 'autonomous', label: 'Автономная работа' },
+  { value: 'mentorship', label: 'Менторство и рост' },
+]
 
 function SkillCombobox({
   onAdd,
@@ -203,6 +233,12 @@ export function ProfileContent() {
     professional: [],
   })
 
+  const [preferences, setPreferences] = useState<Preferences>({
+    workFormat: '',
+    companyType: '',
+    managementStyle: '',
+  })
+
   // Load from database on mount
   useEffect(() => {
     if (profileData) {
@@ -230,12 +266,13 @@ export function ProfileContent() {
       // Component needs { id, company, position, period }
       if (Array.isArray(profileData.workExperience)) {
         const mapped = (profileData.workExperience as any[]).map((w, i) => ({
-          id:       w.id       || String(Date.now() + i),
-          position: w.position || '',
-          company:  w.company  || '',
-          period:   w.period   || (w.startDate
+          id:          w.id          || String(Date.now() + i),
+          position:    w.position    || '',
+          company:     w.company     || '',
+          period:      w.period      || (w.startDate
             ? `${w.startDate}${w.current ? ' — настоящее время' : w.endDate ? ` — ${w.endDate}` : ''}`
             : ''),
+          description: w.description || '',
         }))
         setWorkExperience(mapped)
       }
@@ -261,6 +298,12 @@ export function ProfileContent() {
           setSkills({ technical: s as string[], professional: [] })
         }
       }
+
+      setPreferences({
+        workFormat: (profileData as any).workFormatPreference || '',
+        companyType: (profileData as any).companyTypePreference || '',
+        managementStyle: (profileData as any).managementStylePreference || '',
+      })
     }
   }, [profileData])
 
@@ -268,20 +311,24 @@ export function ProfileContent() {
     pd = personalData,
     we = workExperience,
     ed = education,
-    sk = skills
+    sk = skills,
+    prefs = preferences
   ) => {
     updateProfile({
-      fullName:        pd.fullName,
-      phone:           pd.phone,
-      location:        pd.city,
-      desiredPosition: we[0]?.position || 'Специалист',
-      experienceYears: we.length * 2,
-      education:       ed,
-      workExperience:  we,
-      skills:          sk,
-      githubUrl:       pd.github   || undefined,
-      linkedinUrl:     pd.telegram || undefined,
-    })
+      fullName:                   pd.fullName,
+      phone:                      pd.phone,
+      location:                   pd.city,
+      desiredPosition:            we[0]?.position || 'Специалист',
+      experienceYears:            we.length * 2,
+      education:                  ed,
+      workExperience:             we,
+      skills:                     sk,
+      githubUrl:                  pd.github   || undefined,
+      linkedinUrl:                pd.telegram || undefined,
+      workFormatPreference:       prefs.workFormat      || undefined,
+      companyTypePreference:      prefs.companyType     || undefined,
+      managementStylePreference:  prefs.managementStyle || undefined,
+    } as any)
   }
 
   // Modal states
@@ -289,12 +336,14 @@ export function ProfileContent() {
   const [workModalOpen, setWorkModalOpen] = useState(false)
   const [educationModalOpen, setEducationModalOpen] = useState(false)
   const [skillsModalOpen, setSkillsModalOpen] = useState(false)
+  const [preferencesModalOpen, setPreferencesModalOpen] = useState(false)
 
   // Temp states for editing
   const [tempPersonal, setTempPersonal] = useState<PersonalData>(personalData)
   const [tempWork, setTempWork] = useState<WorkExperience[]>(workExperience)
   const [tempEducation, setTempEducation] = useState<Education[]>(education)
   const [tempSkills, setTempSkills] = useState<Skills>(skills)
+  const [tempPreferences, setTempPreferences] = useState<Preferences>(preferences)
 
   const openPersonalModal = () => {
     setTempPersonal(personalData)
@@ -313,7 +362,7 @@ export function ProfileContent() {
   }
 
   const addWorkExperience = () => {
-    setTempWork([...tempWork, { id: Date.now().toString(), position: "", company: "", period: "" }])
+    setTempWork([...tempWork, { id: Date.now().toString(), position: "", company: "", period: "", description: "" }])
   }
 
   const removeWorkExperience = (id: string) => {
@@ -523,6 +572,12 @@ export function ProfileContent() {
                   <span className="text-muted-foreground">Время работы:</span>{" "}
                   <span className="text-blue-600 dark:text-blue-400">{work.period}</span>
                 </p>
+                {work.description && (
+                  <p>
+                    <span className="text-muted-foreground">Описание:</span>{" "}
+                    <span className="text-card-foreground whitespace-pre-line">{work.description}</span>
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -570,6 +625,46 @@ export function ProfileContent() {
         normalizedSkills={profileData?.profileSkills ?? []}
         onEdit={openSkillsModal}
       />
+
+      {/* Preferences */}
+      <Card className="bg-card border-border">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10">
+                <Settings2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-card-foreground">Предпочтения поиска</h2>
+                <p className="text-xs text-muted-foreground">Влияют на подбор вакансий</p>
+              </div>
+            </div>
+            <Button onClick={() => { setTempPreferences(preferences); setPreferencesModalOpen(true) }} size="sm" className="bg-blue-600 hover:bg-blue-700">
+              Редактировать →
+            </Button>
+          </div>
+          <div className="space-y-2 text-sm">
+            <p>
+              <span className="text-muted-foreground">Формат работы:</span>{" "}
+              <span className="text-blue-600 dark:text-blue-400">
+                {WORK_FORMAT_OPTIONS.find(o => o.value === preferences.workFormat)?.label || <span className="text-muted-foreground italic">не указано</span>}
+              </span>
+            </p>
+            <p>
+              <span className="text-muted-foreground">Тип компании:</span>{" "}
+              <span className="text-blue-600 dark:text-blue-400">
+                {COMPANY_TYPE_OPTIONS.find(o => o.value === preferences.companyType)?.label || <span className="text-muted-foreground italic">не указано</span>}
+              </span>
+            </p>
+            <p>
+              <span className="text-muted-foreground">Стиль управления:</span>{" "}
+              <span className="text-blue-600 dark:text-blue-400">
+                {MANAGEMENT_STYLE_OPTIONS.find(o => o.value === preferences.managementStyle)?.label || <span className="text-muted-foreground italic">не указано</span>}
+              </span>
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Personal Data Modal */}
       <Dialog open={personalModalOpen} onOpenChange={setPersonalModalOpen}>
@@ -687,6 +782,17 @@ export function ProfileContent() {
                     placeholder="2020 - настоящее время"
                     className="bg-background border-border"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-card-foreground">Чем занимался / достижения</Label>
+                  <Textarea
+                    value={work.description}
+                    onChange={(e) => updateWorkExperience(work.id, "description", e.target.value)}
+                    placeholder="Разрабатывал REST API на NestJS, снизил latency с 400мс до 80мс. Настроил CI/CD, сократив время деплоя с 30 до 5 минут. Участвовал в ревью кода команды из 5 человек."
+                    className="bg-background border-border min-h-[100px] resize-y"
+                    rows={4}
+                  />
+                  <p className="text-xs text-muted-foreground">Напишите своими словами — что делал, что построил, что улучшил. Это используется для генерации резюме.</p>
                 </div>
               </div>
             ))}
@@ -837,6 +943,62 @@ export function ProfileContent() {
         </DialogContent>
       </Dialog>
 
+      {/* Preferences Modal */}
+      <Dialog open={preferencesModalOpen} onOpenChange={setPreferencesModalOpen}>
+        <DialogContent className="sm:max-w-[500px] bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-card-foreground">Предпочтения поиска работы</DialogTitle>
+            <DialogDescription className="text-muted-foreground text-sm">Эти данные улучшают подбор вакансий под вас</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5 py-4">
+            <div className="space-y-2">
+              <Label className="text-card-foreground">Формат работы</Label>
+              <Select value={tempPreferences.workFormat} onValueChange={v => setTempPreferences(p => ({ ...p, workFormat: v }))}>
+                <SelectTrigger className="bg-background border-border">
+                  <SelectValue placeholder="Выберите формат..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORK_FORMAT_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-card-foreground">Тип компании</Label>
+              <Select value={tempPreferences.companyType} onValueChange={v => setTempPreferences(p => ({ ...p, companyType: v }))}>
+                <SelectTrigger className="bg-background border-border">
+                  <SelectValue placeholder="Выберите тип компании..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMPANY_TYPE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-card-foreground">Стиль управления</Label>
+              <Select value={tempPreferences.managementStyle} onValueChange={v => setTempPreferences(p => ({ ...p, managementStyle: v }))}>
+                <SelectTrigger className="bg-background border-border">
+                  <SelectValue placeholder="Выберите стиль..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {MANAGEMENT_STYLE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreferencesModalOpen(false)} className="bg-transparent border-border">
+              Отмена
+            </Button>
+            <Button onClick={() => {
+              setPreferences(tempPreferences)
+              syncToDb(personalData, workExperience, education, skills, tempPreferences)
+              setPreferencesModalOpen(false)
+            }} className="bg-blue-600 hover:bg-blue-700">
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )
