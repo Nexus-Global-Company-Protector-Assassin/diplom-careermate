@@ -130,6 +130,7 @@ appendonly.aof
 
 # Prisma
 prisma/migrations/**/migration.sql.tmp
+!backend/prisma/migrations/**/migration.sql
 
 # ==========================================
 # Application Data
