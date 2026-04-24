@@ -189,3 +189,15 @@ model VacancySkill {
 
   @@id([vacancyId, skillId])
 }
+
+model RecommendationImpression {
+  id           String   @id @default(uuid())
+  profileId    String
+  vacancyId    String
+  position     Int
+  score        Float
+  modelVersion String   @default("rule-based-v1")
+  createdAt    DateTime @default(now())
+
+  @@index([profileId, createdAt])
+}
