@@ -11,16 +11,16 @@ export class ResumesService {
         private readonly aiService: AiService,
     ) {}
 
-    private async getProfileId() {
-        const profile = await this.prisma.profile.findFirst();
+    private async getProfileIdForUser(userId: string): Promise<string> {
+        const profile = await this.prisma.profile.findFirst({ where: { userId } });
         if (!profile) {
-            throw new NotFoundException('Должен существовать хотя бы один профиль (demo user)');
+            throw new NotFoundException('Профиль не найден');
         }
         return profile.id;
     }
 
-    async getHistory() {
-        const profileId = await this.getProfileId();
+    async getHistory(userId: string) {
+        const profileId = await this.getProfileIdForUser(userId);
 
         const resumes = await this.prisma.resume.findMany({
             where: { profileId },
@@ -60,7 +60,7 @@ export class ResumesService {
         return { resumes: mappedResumes, history: mappedHistory };
     }
 
-    async generateCoverLetter(company: string, position: string, keyPoints?: string, profile?: any) {
+    async generateCoverLetter(company: string, position: string, keyPoints?: string, profile?: any, userId?: string) {
         const vacancy = {
             title: position,
             employer: company,
@@ -84,7 +84,8 @@ export class ResumesService {
         const { coverLetter } = await this.aiService.generateCoverLetter(vacancy, resumeContent, 'ru');
 
         try {
-            const profileId = await this.getProfileId();
+            const profileId = userId ? await this.getProfileIdForUser(userId) : null;
+            if (!profileId) return coverLetter;
             await this.prisma.resume.create({
                 data: {
                     profileId,
@@ -102,8 +103,8 @@ export class ResumesService {
         return coverLetter;
     }
 
-    async saveResume(title: string, subtitle?: string, content?: string, type: string = 'resume', reviewData?: any) {
-        const profileId = await this.getProfileId();
+    async saveResume(title: string, subtitle?: string, content?: string, type: string = 'resume', reviewData?: any, userId?: string) {
+        const profileId = await this.getProfileIdForUser(userId!);
         return this.prisma.resume.create({
             data: {
                 profileId,
@@ -117,8 +118,8 @@ export class ResumesService {
         });
     }
 
-    async uploadResumeFile(file: Express.Multer.File, title: string) {
-        const profileId = await this.getProfileId();
+    async uploadResumeFile(file: Express.Multer.File, title: string, userId?: string) {
+        const profileId = await this.getProfileIdForUser(userId!);
         const ext = file.originalname.split('.').pop() || 'pdf';
         const key = `resumes/${profileId}/${crypto.randomUUID()}.${ext}`;
 
@@ -137,8 +138,8 @@ export class ResumesService {
         });
     }
 
-    async getDownloadUrl(resumeId: string): Promise<string> {
-        const profileId = await this.getProfileId();
+    async getDownloadUrl(resumeId: string, userId?: string): Promise<string> {
+        const profileId = await this.getProfileIdForUser(userId!);
         const resume = await this.prisma.resume.findFirst({
             where: { id: resumeId, profileId },
         });
@@ -154,8 +155,8 @@ export class ResumesService {
         return this.storage.getPresignedDownloadUrl(resume.fileKey);
     }
 
-    async deleteResume(id: string) {
-        const profileId = await this.getProfileId();
+    async deleteResume(id: string, userId?: string) {
+        const profileId = await this.getProfileIdForUser(userId!);
         await this.prisma.resume.deleteMany({ where: { id, profileId } });
         return { success: true };
     }

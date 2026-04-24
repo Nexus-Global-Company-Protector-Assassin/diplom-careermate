@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { VacanciesController } from './vacancies.controller';
 import { VacanciesService } from './vacancies.service';
 
+const mockUser = { userId: 'user-uuid-1', email: 'test@test.com' };
+
 describe('VacanciesController', () => {
     let controller: VacanciesController;
     let service: VacanciesService;
@@ -11,6 +13,9 @@ describe('VacanciesController', () => {
             getVacancies: jest.fn().mockResolvedValue([{ id: 'v1' }]),
             searchAndSave: jest.fn().mockResolvedValue([{ id: 'v2' }]),
             getRecommendedForProfile: jest.fn().mockResolvedValue([]),
+            interviewPrep: jest.fn().mockResolvedValue({ questions: [] }),
+            evaluateVacancy: jest.fn().mockResolvedValue({ grade: 'B' }),
+            generateCoverLetter: jest.fn().mockResolvedValue({ coverLetter: 'text' }),
         };
 
         const module: TestingModule = await Test.createTestingModule({
@@ -21,7 +26,10 @@ describe('VacanciesController', () => {
                     useValue: mockService,
                 },
             ],
-        }).compile();
+        })
+            .overrideGuard(require('../auth/jwt-auth.guard').JwtAuthGuard)
+            .useValue({ canActivate: () => true })
+            .compile();
 
         controller = module.get<VacanciesController>(VacanciesController);
         service = module.get<VacanciesService>(VacanciesService);
@@ -61,5 +69,20 @@ describe('VacanciesController', () => {
     it('should mock toggleFavorite', () => {
         const result = controller.toggleFavorite({ vacancyId: '123', isFavorite: true });
         expect(result).toHaveProperty('isFavorite', true);
+    });
+
+    it('should call interviewPrep with userId', async () => {
+        const result = await controller.getInterviewPrep(mockUser, 'vacancy-1');
+        expect(service.interviewPrep).toHaveBeenCalledWith('vacancy-1', undefined, mockUser.userId);
+    });
+
+    it('should call evaluateVacancy with userId', async () => {
+        const result = await controller.getEvaluation(mockUser, 'vacancy-1');
+        expect(service.evaluateVacancy).toHaveBeenCalledWith('vacancy-1', undefined, mockUser.userId);
+    });
+
+    it('should call generateCoverLetter with userId', async () => {
+        const result = await controller.getCoverLetter(mockUser, 'vacancy-1', undefined, 'ru');
+        expect(service.generateCoverLetter).toHaveBeenCalledWith('vacancy-1', undefined, 'ru', mockUser.userId);
     });
 });

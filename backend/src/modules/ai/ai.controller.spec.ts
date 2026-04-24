@@ -3,6 +3,9 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 
+const USER_ID = 'user-uuid-1';
+const mockUser = { userId: USER_ID, email: 'test@test.com' };
+
 describe('AiController', () => {
     let controller: AiController;
     let service: AiService;
@@ -23,6 +26,8 @@ describe('AiController', () => {
         })
             .overrideGuard(ThrottlerGuard)
             .useValue({ canActivate: () => true })
+            .overrideGuard(require('../auth/jwt-auth.guard').JwtAuthGuard)
+            .useValue({ canActivate: () => true })
             .compile();
 
         controller = module.get<AiController>(AiController);
@@ -35,9 +40,9 @@ describe('AiController', () => {
 
     it('should call service and return response', async () => {
         const body = { message: 'hello' };
-        const result = await controller.chat(body);
+        const result = await controller.chat(mockUser, body);
 
-        expect(service.generateResponse).toHaveBeenCalledWith('hello');
+        expect(service.generateResponse).toHaveBeenCalledWith('hello', USER_ID);
         expect(result).toEqual({ response: 'mock response' });
     });
 });

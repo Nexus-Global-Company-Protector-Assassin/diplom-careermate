@@ -710,7 +710,7 @@ export class VacanciesService {
     /**
      * AI Deep Analysis (7-block evaluation + Ghost Job Detection) for a specific vacancy
      */
-    async evaluateVacancy(id: string, resumeId?: string) {
+    async evaluateVacancy(id: string, resumeId?: string, userId?: string) {
         // Find the vacancy safely
         let vacancy: any = null;
         try {
@@ -735,8 +735,9 @@ export class VacanciesService {
                 where: { id: resumeId },
             });
         } else {
-            // Fallback: find the latest resume (any type)
+            // Fallback: find the latest resume for this user
             resume = await this.prisma.resume.findFirst({
+                where: userId ? { profile: { userId } } : undefined,
                 orderBy: { updatedAt: 'desc' },
             });
         }
@@ -751,7 +752,9 @@ export class VacanciesService {
         // Get profile skills for gap analysis
         let profileSkills: string[] = [];
         try {
-            const profile = await this.prisma.profile.findFirst();
+            const profile = await this.prisma.profile.findFirst(
+                userId ? { where: { userId } } : undefined,
+            );
             if (profile && Array.isArray(profile.skills)) profileSkills = profile.skills as string[];
         } catch { /* ignore */ }
 
@@ -769,7 +772,7 @@ export class VacanciesService {
     /**
      * Generate STAR+R interview preparation for a specific vacancy
      */
-    async interviewPrep(id: string, resumeId?: string) {
+    async interviewPrep(id: string, resumeId?: string, userId?: string) {
         // Find the vacancy safely
         let vacancy: any = null;
         try {
@@ -787,7 +790,10 @@ export class VacanciesService {
         if (resumeId && resumeId !== 'all') {
             resume = await this.prisma.resume.findUnique({ where: { id: resumeId } });
         } else {
-            resume = await this.prisma.resume.findFirst({ orderBy: { updatedAt: 'desc' } });
+            resume = await this.prisma.resume.findFirst({
+                where: userId ? { profile: { userId } } : undefined,
+                orderBy: { updatedAt: 'desc' },
+            });
         }
 
         if (!resume) {
@@ -800,7 +806,7 @@ export class VacanciesService {
     /**
      * Generate AI cover letter for a vacancy based on user's resume
      */
-    async generateCoverLetter(id: string, resumeId?: string, language: 'ru' | 'en' = 'ru'): Promise<{ coverLetter: string } | { noResume: true }> {
+    async generateCoverLetter(id: string, resumeId?: string, language: 'ru' | 'en' = 'ru', userId?: string): Promise<{ coverLetter: string } | { noResume: true }> {
         // Find the vacancy safely
         let vacancy: any = null;
         try {
@@ -818,7 +824,10 @@ export class VacanciesService {
         if (resumeId && resumeId !== 'all') {
             resume = await this.prisma.resume.findUnique({ where: { id: resumeId } });
         } else {
-            resume = await this.prisma.resume.findFirst({ orderBy: { updatedAt: 'desc' } });
+            resume = await this.prisma.resume.findFirst({
+                where: userId ? { profile: { userId } } : undefined,
+                orderBy: { updatedAt: 'desc' },
+            });
         }
 
         if (!resume) {

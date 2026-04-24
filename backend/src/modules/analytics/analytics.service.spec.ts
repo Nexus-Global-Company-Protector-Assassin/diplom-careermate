@@ -30,7 +30,7 @@ describe('AnalyticsService', () => {
     });
 
     it('should return weekly report with 4 items', async () => {
-        const result = await service.getWeeklyReport();
+        const result = await service.getWeeklyReport('user-uuid-1');
         expect(Array.isArray(result)).toBe(true);
         expect(result.length).toBe(4);
         expect(result[0]).toHaveProperty('icon');

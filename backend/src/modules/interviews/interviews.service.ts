@@ -5,25 +5,24 @@ import { PrismaService } from '../../database/prisma.service';
 export class InterviewsService {
     constructor(private readonly prisma: PrismaService) {}
 
-    // For PoC we use the first available Profile
-    private async getProfileId() {
-        const profile = await this.prisma.profile.findFirst();
+    private async getProfileIdForUser(userId: string): Promise<string> {
+        const profile = await this.prisma.profile.findFirst({ where: { userId } });
         if (!profile) {
-            throw new NotFoundException('Должен существовать хотя бы один профиль (demo user)');
+            throw new NotFoundException('Профиль не найден');
         }
         return profile.id;
     }
 
-    async getAll() {
-        const profileId = await this.getProfileId();
+    async getAll(userId: string) {
+        const profileId = await this.getProfileIdForUser(userId);
         return this.prisma.interview.findMany({
             where: { profileId },
             orderBy: { createdAt: 'desc' },
         });
     }
 
-    async create(interview: any) {
-        const profileId = await this.getProfileId();
+    async create(interview: any, userId: string) {
+        const profileId = await this.getProfileIdForUser(userId);
         return this.prisma.interview.create({
             data: {
                 profileId,

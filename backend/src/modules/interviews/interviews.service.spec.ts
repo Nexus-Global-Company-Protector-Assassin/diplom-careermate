@@ -3,6 +3,8 @@ import { NotFoundException } from '@nestjs/common';
 import { InterviewsService } from './interviews.service';
 import { PrismaService } from '../../database/prisma.service';
 
+const USER_ID = 'user-uuid-1';
+
 const makePrisma = () => ({
     profile: {
         findFirst: jest.fn(),
@@ -38,11 +40,11 @@ describe('InterviewsService', () => {
     });
 
     describe('getAll', () => {
-        it('should return interviews for the first profile', async () => {
+        it('should return interviews for the user profile', async () => {
             prisma.profile.findFirst.mockResolvedValue({ id: 'profile-1' });
             prisma.interview.findMany.mockResolvedValue([{ id: 'i1', company: 'ACME' }]);
 
-            const result = await service.getAll();
+            const result = await service.getAll(USER_ID);
 
             expect(result).toEqual([{ id: 'i1', company: 'ACME' }]);
             expect(prisma.interview.findMany).toHaveBeenCalledWith({
@@ -54,7 +56,7 @@ describe('InterviewsService', () => {
         it('should throw NotFoundException when no profile exists', async () => {
             prisma.profile.findFirst.mockResolvedValue(null);
 
-            await expect(service.getAll()).rejects.toThrow(NotFoundException);
+            await expect(service.getAll(USER_ID)).rejects.toThrow(NotFoundException);
         });
     });
 
@@ -66,7 +68,7 @@ describe('InterviewsService', () => {
             prisma.profile.findFirst.mockResolvedValue({ id: 'profile-1' });
             prisma.interview.create.mockResolvedValue(created);
 
-            const result = await service.create(dto);
+            const result = await service.create(dto, USER_ID);
 
             expect(result).toEqual(created);
             expect(prisma.interview.create).toHaveBeenCalledWith(
@@ -79,7 +81,7 @@ describe('InterviewsService', () => {
         it('should throw NotFoundException when no profile exists', async () => {
             prisma.profile.findFirst.mockResolvedValue(null);
 
-            await expect(service.create({ company: 'X', position: 'Y', date: '2025', time: '09:00' })).rejects.toThrow(NotFoundException);
+            await expect(service.create({ company: 'X', position: 'Y', date: '2025', time: '09:00' }, USER_ID)).rejects.toThrow(NotFoundException);
         });
     });
 

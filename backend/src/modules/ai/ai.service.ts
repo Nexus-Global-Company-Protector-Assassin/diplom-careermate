@@ -45,7 +45,7 @@ export class AiService {
         return result;
     }
 
-    async generateResponse(message: string): Promise<string> {
+    async generateResponse(message: string, userId?: string): Promise<string> {
         const llm = this.llmProvider.fastChat ?? this.llmProvider.chat;
         if (!llm) {
             this.logger.warn('LLM_API_KEY is not set. Using mocked response.');
@@ -54,7 +54,9 @@ export class AiService {
 
         try {
             let context = '';
-            const profile = await this.prisma.profile.findFirst();
+            const profile = await this.prisma.profile.findFirst(
+                userId ? { where: { userId } } : undefined,
+            );
             if (profile) {
                 context = `Контекст пользователя: Меня зовут ${profile.fullName || 'Кандидат'}. Ищу работу на позицию: ${profile.desiredPosition || 'Разработчик'}. Обо мне: ${profile.aboutMe || ''}. Навыки: ${JSON.stringify(profile.skills) || ''}.`;
             }

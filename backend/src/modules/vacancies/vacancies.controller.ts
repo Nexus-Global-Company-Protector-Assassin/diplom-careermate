@@ -1,9 +1,12 @@
-import { Controller, Get, Post, Query, Body, Param, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Query, Body, Param, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { VacanciesService } from './vacancies.service';
 
 @ApiTags('Vacancies')
 @Controller('vacancies')
+@UseGuards(JwtAuthGuard)
 export class VacanciesController {
     constructor(private readonly vacanciesService: VacanciesService) { }
 
@@ -135,16 +138,24 @@ export class VacanciesController {
     @ApiOperation({ summary: 'Generate STAR+R interview preparation for a vacancy' })
     @ApiParam({ name: 'id', description: 'Vacancy ID' })
     @ApiQuery({ name: 'resumeId', required: false, description: 'Resume ID to use for interview prep' })
-    async getInterviewPrep(@Param('id') id: string, @Query('resumeId') resumeId?: string) {
-        return this.vacanciesService.interviewPrep(id, resumeId);
+    async getInterviewPrep(
+        @CurrentUser() user: { userId: string },
+        @Param('id') id: string,
+        @Query('resumeId') resumeId?: string,
+    ) {
+        return this.vacanciesService.interviewPrep(id, resumeId, user.userId);
     }
 
     @Get(':id/evaluation')
     @ApiOperation({ summary: 'Get AI deep 6-block analysis for a vacancy' })
     @ApiParam({ name: 'id', description: 'Vacancy ID' })
     @ApiQuery({ name: 'resumeId', required: false, description: 'Resume ID to evaluate against' })
-    async getEvaluation(@Param('id') id: string, @Query('resumeId') resumeId?: string) {
-        return this.vacanciesService.evaluateVacancy(id, resumeId);
+    async getEvaluation(
+        @CurrentUser() user: { userId: string },
+        @Param('id') id: string,
+        @Query('resumeId') resumeId?: string,
+    ) {
+        return this.vacanciesService.evaluateVacancy(id, resumeId, user.userId);
     }
 
     @Get(':id/cover-letter')
@@ -153,11 +164,12 @@ export class VacanciesController {
     @ApiQuery({ name: 'resumeId', required: false, description: 'Resume ID to use for cover letter generation' })
     @ApiQuery({ name: 'language', required: false, description: 'Language for cover letter: ru or en', enum: ['ru', 'en'] })
     async getCoverLetter(
+        @CurrentUser() user: { userId: string },
         @Param('id') id: string,
         @Query('resumeId') resumeId?: string,
         @Query('language') language: 'ru' | 'en' = 'ru',
     ) {
-        return this.vacanciesService.generateCoverLetter(id, resumeId, language);
+        return this.vacanciesService.generateCoverLetter(id, resumeId, language, user.userId);
     }
 }
 

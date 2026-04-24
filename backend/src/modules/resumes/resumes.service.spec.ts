@@ -4,8 +4,9 @@ import { ResumesService } from './resumes.service';
 import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../storage/storage.service';
 
+const USER_ID = 'user-uuid-1';
 const PROFILE_ID = 'profile-uuid-1';
-const mockProfile = { id: PROFILE_ID };
+const mockProfile = { id: PROFILE_ID, userId: USER_ID };
 
 const mockResume = {
     id: 'resume-uuid-1',
@@ -70,7 +71,7 @@ describe('ResumesService', () => {
 
     describe('getHistory', () => {
         it('should return mapped resumes and history', async () => {
-            const result = await service.getHistory();
+            const result = await service.getHistory(USER_ID);
             expect(result.resumes).toHaveLength(1);
             expect(result.history).toHaveLength(1);
             expect(result.resumes[0].title).toBe('Моё резюме');
@@ -78,13 +79,13 @@ describe('ResumesService', () => {
 
         it('should throw NotFoundException when no profile exists', async () => {
             mockPrisma.profile.findFirst.mockResolvedValue(null);
-            await expect(service.getHistory()).rejects.toThrow(NotFoundException);
+            await expect(service.getHistory(USER_ID)).rejects.toThrow(NotFoundException);
         });
     });
 
     describe('saveResume', () => {
         it('should create a resume record in prisma', async () => {
-            const result = await service.saveResume('Test', 'Sub', 'content', 'resume');
+            const result = await service.saveResume('Test', 'Sub', 'content', 'resume', undefined, USER_ID);
             expect(mockPrisma.resume.create).toHaveBeenCalledWith(
                 expect.objectContaining({ data: expect.objectContaining({ title: 'Test' }) }),
             );
@@ -94,7 +95,7 @@ describe('ResumesService', () => {
 
     describe('deleteResume', () => {
         it('should call prisma deleteMany', async () => {
-            await service.deleteResume('resume-uuid-1');
+            await service.deleteResume('resume-uuid-1', USER_ID);
             expect(mockPrisma.resume.deleteMany).toHaveBeenCalledWith({
                 where: { id: 'resume-uuid-1', profileId: PROFILE_ID },
             });
@@ -116,7 +117,7 @@ describe('ResumesService', () => {
                 fileKey: `resumes/${PROFILE_ID}/resume-uuid-1.pdf`,
             });
 
-            const result = await service.uploadResumeFile(file, 'My Resume');
+            const result = await service.uploadResumeFile(file, 'My Resume', USER_ID);
             expect(mockStorage.uploadFile).toHaveBeenCalledWith(
                 file.buffer,
                 expect.stringContaining(`resumes/${PROFILE_ID}/`),
@@ -134,19 +135,19 @@ describe('ResumesService', () => {
     describe('getDownloadUrl', () => {
         it('should return presigned URL for resume with fileKey', async () => {
             mockPrisma.resume.findFirst.mockResolvedValue({ ...mockResume, fileKey: 'resumes/p/r.pdf' });
-            const url = await service.getDownloadUrl('resume-uuid-1');
+            const url = await service.getDownloadUrl('resume-uuid-1', USER_ID);
             expect(url).toMatch(/^https?:\/\//);
             expect(mockStorage.getPresignedDownloadUrl).toHaveBeenCalledWith('resumes/p/r.pdf');
         });
 
         it('should throw NotFoundException when resume has no fileKey', async () => {
             mockPrisma.resume.findFirst.mockResolvedValue({ ...mockResume, fileKey: null });
-            await expect(service.getDownloadUrl('resume-uuid-1')).rejects.toThrow(NotFoundException);
+            await expect(service.getDownloadUrl('resume-uuid-1', USER_ID)).rejects.toThrow(NotFoundException);
         });
 
         it('should throw NotFoundException when resume not found', async () => {
             mockPrisma.resume.findFirst.mockResolvedValue(null);
-            await expect(service.getDownloadUrl('resume-uuid-1')).rejects.toThrow(NotFoundException);
+            await expect(service.getDownloadUrl('resume-uuid-1', USER_ID)).rejects.toThrow(NotFoundException);
         });
     });
 });
