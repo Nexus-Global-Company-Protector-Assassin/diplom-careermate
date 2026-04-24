@@ -7,11 +7,12 @@ import { AiModule } from '../ai/ai.module';
 import { SkillsModule } from '../skills/skills.module';
 import { EmbeddingsModule } from '../ai/embeddings/embeddings.module';
 import { QuestionGenModule } from '../interviews/question-gen/question-gen.module';
+import { UserPreferencesService } from './user-preferences.service';
 
 @Module({
     imports: [DatabaseModule, HttpModule, AiModule, SkillsModule, EmbeddingsModule, QuestionGenModule],
     controllers: [VacanciesController],
-    providers: [VacanciesService],
+    providers: [VacanciesService, UserPreferencesService],
     exports: [VacanciesService],
 })
 export class VacanciesModule { }
