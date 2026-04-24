@@ -7,6 +7,7 @@ import { AiService } from '../ai/ai.service';
 import { SkillsService } from '../skills/skills.service';
 import { EmbeddingsService } from '../ai/embeddings/embeddings.service';
 import { QuestionGenService } from '../interviews/question-gen/question-gen.service';
+import { UserPreferencesService } from './user-preferences.service';
 
 // Adzuna API base URL
 const ADZUNA_API = 'https://api.adzuna.com/v1/api/jobs';
@@ -311,6 +312,7 @@ export class VacanciesService {
         private readonly skillsService: SkillsService,
         private readonly embeddingsService: EmbeddingsService,
         private readonly questionGenService: QuestionGenService,
+        private readonly userPreferences: UserPreferencesService,
     ) { }
 
     /**
@@ -374,7 +376,8 @@ export class VacanciesService {
         position: string,
         profileSkills: string[],
         limit = 10,
-        salary?: number
+        salary?: number,
+        userId?: string,
     ): Promise<any[]> {
         // Check if we have enough vacancies for this position in DB
         const existing = await this.prisma.vacancy.count({
@@ -525,22 +528,23 @@ export class VacanciesService {
      * Record a behavioral interaction signal (click/apply/favorite/analyze/dismiss).
      * Uses upsert to avoid duplicate rows — re-interactions refresh the timestamp.
      */
-    async recordInteraction(vacancyId: string, type: string): Promise<void> {
+    async recordInteraction(vacancyId: string, type: string, userId?: string): Promise<void> {
         const allowed = ['click', 'apply', 'favorite', 'analyze', 'dismiss'];
         if (!allowed.includes(type)) return;
 
-        const profile = await this.prisma.profile.findFirst({ select: { id: true } });
+        const profile = userId
+            ? await this.prisma.profile.findFirst({ where: { userId }, select: { id: true } })
+            : null;
         if (!profile) return;
 
         await this.prisma.vacancyInteraction.upsert({
-            where: {
-                profileId_vacancyId_type: { profileId: profile.id, vacancyId, type },
-            },
+            where: { profileId_vacancyId_type: { profileId: profile.id, vacancyId, type } },
             create: { profileId: profile.id, vacancyId, type },
             update: { createdAt: new Date() },
         });
 
-        this.logger.log(`[Interaction] type=${type} vacancy=${vacancyId}`);
+        await this.userPreferences.invalidateCache(profile.id);
+        this.logger.log(`[Interaction] type=${type} vacancy=${vacancyId} profile=${profile.id}`);
     }
 
     /**

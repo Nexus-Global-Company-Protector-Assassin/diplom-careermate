@@ -51,6 +51,7 @@ export class VacanciesController {
     @ApiQuery({ name: 'skills', required: false, description: 'Comma-separated skill list' })
     @ApiQuery({ name: 'limit', required: false })
     async getRecommended(
+        @CurrentUser() user: { userId: string },
         @Query('position') position?: string,
         @Query('skills') skillsRaw?: string,
         @Query('salary') salaryStr?: string,
@@ -63,7 +64,7 @@ export class VacanciesController {
         const salary = salaryStr ? parseInt(salaryStr, 10) : undefined;
         const lim = limit ? parseInt(limit) : 10;
 
-        const vacancies = await this.vacanciesService.getRecommendedForProfile(pos, profileSkills, lim, salary);
+        const vacancies = await this.vacanciesService.getRecommendedForProfile(pos, profileSkills, lim, salary, user.userId);
 
         return vacancies.map((v: any) => ({
             id: v.id,
@@ -110,10 +111,11 @@ export class VacanciesController {
     @ApiOperation({ summary: 'Record behavioral interaction signal for a vacancy' })
     @ApiParam({ name: 'id', description: 'Vacancy ID' })
     async trackInteraction(
+        @CurrentUser() user: { userId: string },
         @Param('id') vacancyId: string,
         @Body() body: { type: string },
     ): Promise<void> {
-        await this.vacanciesService.recordInteraction(vacancyId, body.type);
+        await this.vacanciesService.recordInteraction(vacancyId, body.type, user.userId);
     }
 
     @Get('responses')

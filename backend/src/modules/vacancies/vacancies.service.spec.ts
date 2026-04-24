@@ -9,6 +9,8 @@ import { SkillsService } from '../skills/skills.service';
 import { of, throwError } from 'rxjs';
 import { EmbeddingsService } from '../ai/embeddings/embeddings.service';
 import { QuestionGenService } from '../interviews/question-gen/question-gen.service';
+import { UserPreferencesService } from './user-preferences.service';
+import { RedisService } from '../redis/redis.service';
 
 // ──────────────────────────────── mock data ──────────────────────────────────
 const mockVacancy = {
@@ -55,10 +57,20 @@ const mockAdzunaResponse = {
 // ─────────────────────────────── mock factories ───────────────────────────────
 const makePrisma = () => ({
     vacancy: {
-        findMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         upsert: jest.fn(),
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
         count: jest.fn().mockResolvedValue(0),
+    },
+    profile: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'profile-uuid-1' }),
+    },
+    vacancyInteraction: {
+        upsert: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+    },
+    recommendationImpression: {
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
 });
 
@@ -84,6 +96,19 @@ const makeEmbeddingsService = () => ({
 
 const makeQuestionGenService = () => ({
     generateForVacancy: jest.fn().mockResolvedValue({ questions: [], candidate_questions: [], tips: '' }),
+});
+
+const makeUserPreferences = () => ({
+    compute: jest.fn().mockResolvedValue({ archetype: {}, salary_band: {}, work_format: {} }),
+    extractVacancyFeatures: jest.fn().mockReturnValue({ archetype: {}, salary_band: {}, work_format: {} }),
+    computePersonalScore: jest.fn().mockReturnValue(0),
+    invalidateCache: jest.fn().mockResolvedValue(undefined),
+});
+
+const makeRedis = () => ({
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue('OK'),
+    del: jest.fn().mockResolvedValue(1),
 });
 
 const makeConfig = (overrides: Record<string, string> = {}) => ({
@@ -122,6 +147,8 @@ describe('VacanciesService', () => {
                 { provide: SkillsService, useValue: makeSkillsService() },
                 { provide: EmbeddingsService, useValue: makeEmbeddingsService() },
                 { provide: QuestionGenService, useValue: makeQuestionGenService() },
+                { provide: UserPreferencesService, useValue: makeUserPreferences() },
+                { provide: RedisService, useValue: makeRedis() },
             ],
         }).compile();
 
@@ -281,6 +308,8 @@ describe('VacanciesService', () => {
                     { provide: SkillsService, useValue: makeSkillsService() },
                     { provide: EmbeddingsService, useValue: makeEmbeddingsService() },
                     { provide: QuestionGenService, useValue: makeQuestionGenService() },
+                    { provide: UserPreferencesService, useValue: makeUserPreferences() },
+                    { provide: RedisService, useValue: makeRedis() },
                 ],
             }).compile();
 
@@ -324,6 +353,31 @@ describe('VacanciesService', () => {
 
             const searchCall = http.get.mock.calls[0];
             expect(searchCall[1].params.results_per_page).toBe(50);
+        });
+    });
+
+    // ─────────────────────────────── recordInteraction ───────────────────────
+    describe('recordInteraction', () => {
+        it('does nothing for unknown interaction types', async () => {
+            await service.recordInteraction('vac-1', 'unknown', 'user-1');
+            expect(prisma.vacancyInteraction.upsert).not.toHaveBeenCalled();
+        });
+
+        it('does nothing when profile is not found for userId', async () => {
+            prisma.profile.findFirst.mockResolvedValue(null);
+            await service.recordInteraction('vac-1', 'click', 'user-1');
+            expect(prisma.vacancyInteraction.upsert).not.toHaveBeenCalled();
+        });
+
+        it('upserts interaction and invalidates cache when profile exists', async () => {
+            prisma.profile.findFirst.mockResolvedValue({ id: 'profile-uuid-1' });
+            await service.recordInteraction('vac-1', 'click', 'user-1');
+            expect(prisma.vacancyInteraction.upsert).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { profileId_vacancyId_type: { profileId: 'profile-uuid-1', vacancyId: 'vac-1', type: 'click' } },
+                    create: expect.objectContaining({ profileId: 'profile-uuid-1', vacancyId: 'vac-1', type: 'click' }),
+                }),
+            );
         });
     });
 });

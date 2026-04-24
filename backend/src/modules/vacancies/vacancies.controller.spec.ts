@@ -51,8 +51,16 @@ describe('VacanciesController', () => {
         expect(result).toEqual([{ id: 'v2' }]);
     });
 
-    it('should return recommended (stub)', async () => {
-        const result = await controller.getRecommended();
+    it('should pass userId from JWT to getRecommendedForProfile', async () => {
+        (service.getRecommendedForProfile as jest.Mock).mockResolvedValue([]);
+        const result = await controller.getRecommended(mockUser);
+        expect(service.getRecommendedForProfile).toHaveBeenCalledWith(
+            '',
+            [],
+            10,
+            undefined,
+            mockUser.userId,
+        );
         expect(Array.isArray(result)).toBe(true);
     });
 
@@ -84,5 +92,12 @@ describe('VacanciesController', () => {
     it('should call generateCoverLetter with userId', async () => {
         const result = await controller.getCoverLetter(mockUser, 'vacancy-1', undefined, 'ru');
         expect(service.generateCoverLetter).toHaveBeenCalledWith('vacancy-1', undefined, 'ru', mockUser.userId);
+    });
+
+    it('should pass userId to recordInteraction', async () => {
+        const mockRecordInteraction = jest.fn().mockResolvedValue(undefined);
+        (service as any).recordInteraction = mockRecordInteraction;
+        await controller.trackInteraction(mockUser, 'vacancy-1', { type: 'click' });
+        expect(mockRecordInteraction).toHaveBeenCalledWith('vacancy-1', 'click', mockUser.userId);
     });
 });
