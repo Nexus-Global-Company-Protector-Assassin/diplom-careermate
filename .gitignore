@@ -130,7 +130,6 @@ appendonly.aof
 
 # Prisma
 prisma/migrations/**/migration.sql.tmp
-!backend/prisma/migrations/**/migration.sql
 
 # ==========================================
 # Application Data
@@ -156,6 +155,7 @@ backups/
 *.sql.gz
 *.tar.gz
 *-backup-*
+!backend/prisma/migrations/**/migration.sql
 
 # ==========================================
 # Claude AI
