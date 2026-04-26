@@ -52,7 +52,7 @@ export class SkillsService implements OnModuleInit {
     private async loadCache() {
         this.logger.log('Loading skills taxonomy into memory...');
         const skills = await this.prisma.skill.findMany();
-        
+       
         this.skillsCache.clear();
         for (const skill of skills) {
             const cached: CachedSkill = {
@@ -62,7 +62,7 @@ export class SkillsService implements OnModuleInit {
                 normalizedName: normalizeSkillName(skill.name),
                 aliases: skill.aliases.map(normalizeSkillName),
             };
-            
+           
             // Map canonical name
             this.skillsCache.set(cached.normalizedName, cached);
             // Map aliases
@@ -70,10 +70,10 @@ export class SkillsService implements OnModuleInit {
                 this.skillsCache.set(alias, cached);
             }
         }
-        
+       
         // Prepare sorted names (longest first) for dictionary extraction to prefer 'React Native' over 'React'
         this.sortedSkillNames = Array.from(this.skillsCache.keys()).sort((a, b) => b.length - a.length);
-        
+       
         this.logger.log(`Loaded ${skills.length} canonical skills into cache.`);
     }
 
@@ -82,7 +82,7 @@ export class SkillsService implements OnModuleInit {
      */
     async findOrCreate(rawName: string, category?: string): Promise<{ id: string; name: string; category: string | null }> {
         const normalized = normalizeSkillName(rawName);
-        
+       
         // 1. Check in-memory cache (extremely fast)
         const cached = this.skillsCache.get(normalized);
         if (cached) {
@@ -146,7 +146,7 @@ export class SkillsService implements OnModuleInit {
 Rules:
 - "react.js", "reactjs", "ReactJS" → "React"
 - "k8s" → "Kubernetes"
-- "postgres" / "postgresql" / "PostgreSQL" → "PostgreSQL"  
+- "postgres" / "postgresql" / "PostgreSQL" → "PostgreSQL" 
 - "nodejs" / "node.js" → "Node.js"
 - Omit soft skills (communication, teamwork) unless explicitly stated as a requirement
 - Assign a category: "Frontend" | "Backend" | "DevOps" | "Data" | "Mobile" | "Database" | "Tools"
@@ -204,7 +204,7 @@ ${text.slice(0, 3000)}`;
                 const before = idx > 0 ? lower[idx - 1] : ' ';
                 const after = idx + normalizedKey.length < lower.length ? lower[idx + normalizedKey.length] : ' ';
                 const isBoundary = (c: string) => /[\s,;.()\[\]{}\-\/"'!?:&|<>]/.test(c);
-                
+               
                 if (isBoundary(before) && isBoundary(after)) {
                     found.push({ name: cached.name, category: cached.category ?? undefined });
                     seen.add(cached.id);
@@ -348,3 +348,4 @@ ${text.slice(0, 3000)}`;
         return { profilesMigrated, vacanciesMigrated };
     }
 }
+

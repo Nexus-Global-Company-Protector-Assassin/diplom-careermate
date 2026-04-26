@@ -1,0 +1,113 @@
+<h2>Что показываем на левой панели?</h2>
+<p class="subtitle">Split-layout выбран. Теперь выбери содержимое левой брендинговой половины</p>
+
+<div class="cards">
+
+  <!-- Option A: Logo + features list -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:linear-gradient(160deg,#1e1b4b 0%,#312e81 60%,#4c1d95 100%);min-height:240px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;border-radius:8px;gap:14px;">
+        <!-- Logo -->
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:32px;height:32px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;"></div>
+          <div style="height:12px;background:rgba(255,255,255,0.7);border-radius:4px;width:80px;"></div>
+        </div>
+        <!-- Feature list -->
+        <div style="width:100%;display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:16px;height:16px;background:rgba(99,102,241,0.5);border-radius:50%;flex-shrink:0;"></div>
+            <div style="height:7px;background:rgba(255,255,255,0.4);border-radius:4px;flex:1;"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:16px;height:16px;background:rgba(99,102,241,0.5);border-radius:50%;flex-shrink:0;"></div>
+            <div style="height:7px;background:rgba(255,255,255,0.4);border-radius:4px;flex:1;"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:16px;height:16px;background:rgba(99,102,241,0.5);border-radius:50%;flex-shrink:0;"></div>
+            <div style="height:7px;background:rgba(255,255,255,0.4);border-radius:4px;width:70%;"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:16px;height:16px;background:rgba(99,102,241,0.5);border-radius:50%;flex-shrink:0;"></div>
+            <div style="height:7px;background:rgba(255,255,255,0.4);border-radius:4px;width:85%;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Лого + список фич</h3>
+      <p>Лого вверху, под ним — 4 ключевых преимущества с иконками: «AI-поиск», «Анализ резюме», «Подготовка к интервью», «Аналитика».</p>
+    </div>
+  </div>
+
+  <!-- Option B: Logo + slogan + screenshot mockup -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:linear-gradient(160deg,#1e1b4b 0%,#312e81 60%,#4c1d95 100%);min-height:240px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;border-radius:8px;gap:12px;">
+        <!-- Logo -->
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:32px;height:32px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;"></div>
+          <div style="height:12px;background:rgba(255,255,255,0.7);border-radius:4px;width:80px;"></div>
+        </div>
+        <!-- Slogan -->
+        <div style="text-align:center;">
+          <div style="height:11px;background:rgba(255,255,255,0.6);border-radius:4px;width:130px;margin:0 auto 5px;"></div>
+          <div style="height:8px;background:rgba(255,255,255,0.25);border-radius:4px;width:160px;margin:0 auto;"></div>
+        </div>
+        <!-- App screenshot mockup -->
+        <div style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:10px;width:90%;margin-top:4px;">
+          <div style="height:8px;background:rgba(255,255,255,0.2);border-radius:3px;width:60%;margin-bottom:6px;"></div>
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <div style="height:30px;background:rgba(255,255,255,0.08);border-radius:4px;flex:1;"></div>
+            <div style="height:30px;background:rgba(255,255,255,0.08);border-radius:4px;flex:1;"></div>
+          </div>
+          <div style="height:8px;background:rgba(99,102,241,0.4);border-radius:4px;width:80%;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Лого + слоган + превью интерфейса</h3>
+      <p>Лого, под ним яркий слоган. Ниже — скриншот-превью дашборда в стилизованной рамке. Показывает продукт до входа.</p>
+    </div>
+  </div>
+
+  <!-- Option C: Logo + stats + tagline -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:linear-gradient(160deg,#1e1b4b 0%,#312e81 60%,#4c1d95 100%);min-height:240px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;border-radius:8px;gap:14px;">
+        <!-- Logo -->
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:32px;height:32px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;"></div>
+          <div style="height:12px;background:rgba(255,255,255,0.7);border-radius:4px;width:80px;"></div>
+        </div>
+        <!-- Tagline -->
+        <div style="height:10px;background:rgba(255,255,255,0.5);border-radius:4px;width:120px;"></div>
+        <!-- Stats grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;">
+          <div style="background:rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center;">
+            <div style="height:14px;background:rgba(255,255,255,0.6);border-radius:4px;width:40px;margin:0 auto 4px;"></div>
+            <div style="height:7px;background:rgba(255,255,255,0.2);border-radius:4px;width:60px;margin:0 auto;"></div>
+          </div>
+          <div style="background:rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center;">
+            <div style="height:14px;background:rgba(255,255,255,0.6);border-radius:4px;width:40px;margin:0 auto 4px;"></div>
+            <div style="height:7px;background:rgba(255,255,255,0.2);border-radius:4px;width:55px;margin:0 auto;"></div>
+          </div>
+          <div style="background:rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center;">
+            <div style="height:14px;background:rgba(255,255,255,0.6);border-radius:4px;width:40px;margin:0 auto 4px;"></div>
+            <div style="height:7px;background:rgba(255,255,255,0.2);border-radius:4px;width:50px;margin:0 auto;"></div>
+          </div>
+          <div style="background:rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center;">
+            <div style="height:14px;background:rgba(255,255,255,0.6);border-radius:4px;width:40px;margin:0 auto 4px;"></div>
+            <div style="height:7px;background:rgba(255,255,255,0.2);border-radius:4px;width:65px;margin:0 auto;"></div>
+          </div>
+        </div>
+        <!-- Bottom tagline -->
+        <div style="height:7px;background:rgba(255,255,255,0.2);border-radius:4px;width:150px;"></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Лого + слоган + статистика</h3>
+      <p>Лого, яркий слоган. Ниже 4 цифры в сетке: «10 000+ вакансий», «AI-анализ за 30с», «95% точность», «Бесплатно». Выглядит как landing.</p>
+    </div>
+  </div>
+
+</div>

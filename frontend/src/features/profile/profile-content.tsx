@@ -181,6 +181,7 @@ export function ProfileContent() {
   const { mutate: runPoc, isPending } = useRunPoc()
 
   const [importModalOpen, setImportModalOpen] = useState(false)
+  const [aboutMe, setAboutMe] = useState("")
 
   const [personalData, setPersonalData] = useState<PersonalData>({
     fullName: "",
@@ -228,6 +229,8 @@ export function ProfileContent() {
         telegram:  profileData.linkedinUrl || p.telegram,
         email:     emailFromToken          || p.email,
       }))
+
+      if (profileData.aboutMe) setAboutMe(profileData.aboutMe)
 
       // workExperience: DB stores { company, position, startDate, endDate, current }
       // Component needs { id, company, position, period }
@@ -279,7 +282,8 @@ export function ProfileContent() {
     we = workExperience,
     ed = education,
     sk = skills,
-    prefs = preferences
+    prefs = preferences,
+    am = aboutMe,
   ) => {
     updateProfile({
       fullName:                   pd.fullName,
@@ -290,6 +294,7 @@ export function ProfileContent() {
       education:                  ed,
       workExperience:             we,
       skills:                     sk,
+      aboutMe:                    am.trim() || null,
       githubUrl:                  pd.github   || undefined,
       linkedinUrl:                pd.telegram || undefined,
       workFormatPreference:       prefs.workFormat      || undefined,
@@ -304,6 +309,8 @@ export function ProfileContent() {
   const [educationModalOpen, setEducationModalOpen] = useState(false)
   const [skillsModalOpen, setSkillsModalOpen] = useState(false)
   const [preferencesModalOpen, setPreferencesModalOpen] = useState(false)
+  const [aboutMeModalOpen, setAboutMeModalOpen] = useState(false)
+  const [tempAboutMe, setTempAboutMe] = useState("")
 
   // Temp states for editing
   const [tempPersonal, setTempPersonal] = useState<PersonalData>(personalData)
@@ -608,6 +615,28 @@ export function ProfileContent() {
           </div>
         </CardContent>
       </Card>
+      {/* About Me */}
+      <Card className="bg-card border-border">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10">
+                <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h2 className="text-lg font-semibold text-card-foreground">О себе</h2>
+            </div>
+            <Button onClick={() => { setTempAboutMe(aboutMe); setAboutMeModalOpen(true) }} size="sm" className="bg-blue-600 hover:bg-blue-700">
+              Редактировать →
+            </Button>
+          </div>
+          {aboutMe ? (
+            <p className="text-sm text-card-foreground whitespace-pre-line">{aboutMe}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">Расскажите о себе, своих целях и ценностях — это поможет подбирать более релевантные вакансии.</p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Skills — unified card with raw + AI-normalized */}
       <UnifiedSkillsCard
         technicalSkills={skills.technical}
@@ -990,13 +1019,45 @@ export function ProfileContent() {
         </DialogContent>
       </Dialog>
 
-      {profileData && (
-        <ResumeImportModal
-          open={importModalOpen}
-          onOpenChange={setImportModalOpen}
-          existingProfile={profileData}
-        />
-      )}
+      {/* About Me Modal */}
+      <Dialog open={aboutMeModalOpen} onOpenChange={setAboutMeModalOpen}>
+        <DialogContent className="sm:max-w-[500px] bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-card-foreground">О себе</DialogTitle>
+            <DialogDescription className="text-muted-foreground text-sm">
+              Краткий рассказ о себе, целях и ценностях. Используется при генерации резюме и сопроводительных писем.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              value={tempAboutMe}
+              onChange={e => setTempAboutMe(e.target.value)}
+              placeholder="Опытный разработчик с фокусом на backend-системы. Увлекаюсь ML и системным дизайном. Ищу команду, где ценят инженерную культуру..."
+              className="bg-background border-border min-h-[160px] resize-y"
+              rows={6}
+            />
+            <p className="text-xs text-muted-foreground mt-2">{tempAboutMe.length} / 1000 символов</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAboutMeModalOpen(false)} className="bg-transparent border-border">
+              Отмена
+            </Button>
+            <Button onClick={() => {
+              setAboutMe(tempAboutMe)
+              syncToDb(personalData, workExperience, education, skills, preferences, tempAboutMe)
+              setAboutMeModalOpen(false)
+            }} className="bg-blue-600 hover:bg-blue-700">
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ResumeImportModal
+        open={importModalOpen}
+        onOpenChange={setImportModalOpen}
+        existingProfile={profileData ?? {}}
+      />
 
     </div>
   )

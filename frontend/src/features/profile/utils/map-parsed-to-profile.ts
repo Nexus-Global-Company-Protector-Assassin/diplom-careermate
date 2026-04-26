@@ -13,11 +13,21 @@ export interface MappedSkills {
   professional: string[]
 }
 
+export interface MappedEducation {
+  id: string
+  institution: string
+  degree: string
+  year: string
+}
+
 export interface MappedProfileData {
   fullName?: string
+  phone?: string
+  location?: string
   desiredPosition?: string
   experienceYears?: number
   workExperience?: MappedWorkExperience[]
+  education?: MappedEducation[]
   skills?: MappedSkills
   aboutMe?: string
   careerGoals?: string
@@ -49,6 +59,14 @@ export function mapParsedToProfile(
     result.fullName = parsed.fullName
   }
 
+  if (parsed.phone && !(existing as any).phone) {
+    result.phone = parsed.phone
+  }
+
+  if (parsed.location && !existing.location) {
+    result.location = parsed.location
+  }
+
   if (parsed.desiredPosition && !existing.desiredPosition) {
     result.desiredPosition = parsed.desiredPosition
   }
@@ -77,6 +95,20 @@ export function mapParsedToProfile(
       company: w.company,
       period: w.duration,
       description: w.description ?? "",
+    }))
+  }
+
+  const existingEdu = existing.education as MappedEducation[] | undefined
+  if (
+    Array.isArray(parsed.education) &&
+    parsed.education.length > 0 &&
+    (!existingEdu || existingEdu.length === 0)
+  ) {
+    result.education = parsed.education.map((e: any) => ({
+      id: newId(),
+      institution: e.institution || e.school || "",
+      degree: e.field || e.degree || e.specialization || "",
+      year: String(e.endYear || e.year || e.graduationYear || ""),
     }))
   }
 

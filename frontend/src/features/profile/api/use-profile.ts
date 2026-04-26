@@ -24,12 +24,27 @@ export const useUpdateProfile = () => {
   return useMutation({
     mutationFn: (data: ProfileDto) => api.put<ProfileDto>("/profiles/me", data),
     onSuccess: () => {
-      // Invalidate so the full profile (including profileSkills relation) is re-fetched
       queryClient.invalidateQueries({ queryKey: profileKeys.me() });
       toast.success("Профиль успешно сохранен!");
     },
     onError: (error: any) => {
       toast.error("Не удалось сохранить профиль", {
+        description: error.message || "Проверьте корректность введенных данных."
+      });
+    }
+  });
+};
+
+export const useUpsertProfile = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: ProfileDto) => api.post<ProfileDto>("/profiles/me", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: profileKeys.me() });
+    },
+    onError: (error: any) => {
+      toast.error("Ошибка сохранения профиля", {
         description: error.message || "Проверьте корректность введенных данных."
       });
     }

@@ -6,7 +6,7 @@ import { Button } from "@/shared/ui/button"
 import { Loader2, Upload, CheckCircle2, AlertCircle, FileText, X } from "lucide-react"
 import { toast } from "sonner"
 import { useUploadResume } from "@/features/profile/api/use-upload-resume"
-import { useUpdateProfile } from "@/features/profile/api/use-profile"
+import { useUpsertProfile } from "@/features/profile/api/use-profile"
 import { mapParsedToProfile, type MappedProfileData } from "@/features/profile/utils/map-parsed-to-profile"
 import { getProfileCompleteness, type MissingField } from "@/features/profile/utils/profile-completeness"
 import type { ProfileDto, ParsedProfileDto } from "@/shared/api/types"
@@ -21,17 +21,21 @@ type ModalStep = "upload" | "preview" | "success"
 
 const FIELD_LABELS: Record<string, string> = {
   fullName: "ФИО",
+  phone: "Телефон",
+  location: "Город",
   desiredPosition: "Желаемая должность",
   experienceYears: "Лет опыта",
   workExperience: "Опыт работы",
+  education: "Образование",
   skills: "Навыки",
   aboutMe: "О себе",
   careerGoals: "Карьерные цели",
 }
 
 function formatFieldValue(key: string, value: unknown): string {
-  if (key === "workExperience" && Array.isArray(value)) {
-    return `${value.length} ${value.length === 1 ? "запись" : value.length < 5 ? "записи" : "записей"}`
+  if ((key === "workExperience" || key === "education") && Array.isArray(value)) {
+    const n = value.length
+    return `${n} ${n === 1 ? "запись" : n < 5 ? "записи" : "записей"}`
   }
   if (key === "skills" && value && typeof value === "object" && !Array.isArray(value)) {
     const s = value as { technical: string[] }
@@ -51,7 +55,7 @@ export function ResumeImportModal({ open, onOpenChange, existingProfile }: Resum
   const [filledKeys, setFilledKeys] = useState<string[]>([])
 
   const { mutate: uploadResume, isPending: isUploading } = useUploadResume()
-  const { mutate: updateProfile, isPending: isSaving } = useUpdateProfile()
+  const { mutate: upsertProfile, isPending: isSaving } = useUpsertProfile()
 
   const handleClose = () => {
     onOpenChange(false)
@@ -82,7 +86,15 @@ export function ResumeImportModal({ open, onOpenChange, existingProfile }: Resum
         const mapped = mapParsedToProfile(parsed, existingProfile)
         setMappedData(mapped)
         if (Object.keys(mapped).length === 0) {
-          toast.info("Все поля уже заполнены — резюме не добавило новых данных")
+          const missingAboutMe = !existingProfile.aboutMe
+          toast.info(
+            "Резюме не добавило новых данных",
+            {
+              description: missingAboutMe
+                ? "Раздел «О себе» в резюме не найден — заполните его вручную на странице профиля."
+                : "Все поля профиля уже заполнены.",
+            }
+          )
           handleClose()
           return
         }
@@ -96,7 +108,7 @@ export function ResumeImportModal({ open, onOpenChange, existingProfile }: Resum
 
   const handleConfirm = () => {
     if (!mappedData) return
-    updateProfile(mappedData as ProfileDto, {
+    upsertProfile(mappedData as ProfileDto, {
       onSuccess: () => {
         const keys = Object.keys(mappedData)
         setFilledKeys(keys)

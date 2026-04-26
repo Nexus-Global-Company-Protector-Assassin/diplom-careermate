@@ -11,7 +11,8 @@ import { UserPreferencesService } from './user-preferences.service';
 import { MlRankingService } from '../ml/ml-ranking.service';
 import { detectArchetype, calcVacancyFreshness, RoleArchetype } from './vacancies.utils';
 
-export { detectArchetype, calcVacancyFreshness, RoleArchetype };
+export { detectArchetype, calcVacancyFreshness };
+export type { RoleArchetype };
 
 // Adzuna API base URL
 const ADZUNA_API = 'https://api.adzuna.com/v1/api/jobs';

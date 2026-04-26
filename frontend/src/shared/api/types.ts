@@ -43,10 +43,12 @@ export interface PocRunResponseDto {
 // Parsed profile returned by the ML Agent after uploading a PDF/DOCX
 export interface ParsedProfileDto {
     fullName: string;
+    phone?: string;
+    location?: string;
     desiredPosition?: string;
     experienceYears?: number;
     skills?: string[];
-    education?: any[];
+    education?: Array<{ institution: string; field?: string; degree?: string; endYear?: number }>;
     workExperience?: Array<{ company: string; position: string; duration: string; description?: string }>;
     aboutMe?: string;
     careerGoals?: string;
