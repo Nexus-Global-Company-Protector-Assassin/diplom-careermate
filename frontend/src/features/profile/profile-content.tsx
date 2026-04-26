@@ -13,13 +13,14 @@ import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select"
 import { useRouter } from "next/navigation"
 import { useRunPoc } from "@/features/poc/api/use-run-poc"
-import { useUploadResume } from "@/features/profile/api/use-upload-resume"
-import { ProfileDto, ParsedProfileDto, PocRunResponseDto } from "@/shared/api"
+import { ProfileDto, PocRunResponseDto } from "@/shared/api"
 import { toast } from "sonner"
 import { useProfile, useUpdateProfile } from "./api/use-profile"
 import { useSkillsDictionary } from "./api/use-skills"
 import { getAccessToken } from "@/shared/lib/auth"
 import { UnifiedSkillsCard } from "./skills-analysis-card"
+import { ProfileCompletenessCard } from "./profile-completeness-card"
+import { ResumeImportModal } from "./resume-import-modal"
 
 interface PersonalData {
   fullName: string
@@ -178,42 +179,8 @@ export function ProfileContent() {
   const { data: profileData, isLoading: profileLoading } = useProfile()
   const { mutate: updateProfile } = useUpdateProfile()
   const { mutate: runPoc, isPending } = useRunPoc()
-  const { mutate: uploadResume, isPending: isUploading } = useUploadResume()
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    uploadResume(file, {
-      onSuccess: (parsed: ParsedProfileDto) => {
-        toast.success(`✅ Резюме разобрано! Привет, ${parsed.fullName}!`)
-        // Auto-fill profile from parsed AI data
-        setPersonalData(prev => ({ ...prev, fullName: parsed.fullName || prev.fullName }))
-        if (parsed.desiredPosition) {
-          setWorkExperience(prev => prev.map((w, i) => i === 0 ? { ...w, position: parsed.desiredPosition! } : w))
-        }
-        if (Array.isArray(parsed.skills) && parsed.skills.length > 0) {
-          setSkills(prev => ({ ...prev, technical: parsed.skills! }))
-        }
-        if (Array.isArray(parsed.workExperience) && parsed.workExperience.length > 0) {
-          const mapped = parsed.workExperience.map((w: any, i: number) => ({
-            id: String(Date.now() + i),
-            position: w.position || w.jobTitle || "",
-            company: w.company || w.employer || "",
-            period: w.period || w.years || "",
-          }))
-          setWorkExperience(mapped)
-        }
-      },
-      onError: (err: Error) => {
-        toast.error("Не удалось разобрать резюме", { description: err.message })
-      }
-    })
-
-    // Reset input so same file can be re-uploaded
-    if (fileInputRef.current) fileInputRef.current.value = ""
-  }
+  const [importModalOpen, setImportModalOpen] = useState(false)
 
   const [personalData, setPersonalData] = useState<PersonalData>({
     fullName: "",
@@ -421,6 +388,12 @@ export function ProfileContent() {
     setSkillsModalOpen(false)
   }
 
+  const handleOpenSection = (section: "personal" | "work" | "skills" | "about") => {
+    if (section === "personal" || section === "about") openPersonalModal()
+    else if (section === "work") openWorkModal()
+    else if (section === "skills") openSkillsModal()
+  }
+
   const handleRunPoc = () => {
     const totalExperienceYears = tempWork.reduce((acc, current) => {
       // Very rough experience estimation for PoC
@@ -498,7 +471,24 @@ export function ProfileContent() {
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-foreground">Профиль</h1>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setImportModalOpen(true)}
+          className="gap-2 bg-transparent border-border hover:border-blue-500/50 hover:text-blue-400"
+        >
+          <Upload className="h-4 w-4" />
+          Импорт из резюме
+        </Button>
       </div>
+
+      {profileData && (
+        <ProfileCompletenessCard
+          profile={profileData}
+          onOpenSection={handleOpenSection}
+          onOpenImportModal={() => setImportModalOpen(true)}
+        />
+      )}
 
       {/* Personal Data */}
       <Card className="bg-card border-border">
@@ -999,6 +989,14 @@ export function ProfileContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {profileData && (
+        <ResumeImportModal
+          open={importModalOpen}
+          onOpenChange={setImportModalOpen}
+          existingProfile={profileData}
+        />
+      )}
 
     </div>
   )

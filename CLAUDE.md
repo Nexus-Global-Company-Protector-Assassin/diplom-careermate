@@ -248,6 +248,27 @@ ML_SHADOW_MODE=true                     # false = использовать ML sc
 - `backend/__mocks__/empty-module.js` + `moduleNameMapper` в jest для `@qdrant` (pre-existing, не установлен)
 - `tsconfig.json`: `isolatedModules: true`
 
+### Career Assessment Quiz (2026-04-26) ✅
+- **Тест**: 10 вопросов (5 универсальных + 5 доменных) о личности и стиле работы, организованы по 6 доменам (IT, Finance, Marketing, Management, Creative, Other)
+- **Скоринг**: 6 измерений (Analytical, Technical, Social, Creative, Leadership, Structured), косинусное сходство против 30 карьерных путей → клиент передаёт топ-5 в AI
+- **Карьерные пути**: 30 ролей в CAREER_PATHS с dimensionProfile-вектором, salaryRange, description
+- **AI**: `CareerPathChain` (JsonOutputParser) → `AiService.generateCareerPathAnalysis()` → топ-3 с роадмапом Junior→Lead, текущими навыками и теми, что нужно изучить
+- **Backend**: `CareerAssessmentModule` с `POST /career-assessment` + `GET /career-assessment/latest`, Redis-кэш 7 дней, mock-режим без LLM_API_KEY
+- **Prisma**: новая таблица `CareerAssessment` (миграция `20260426000001_add_career_assessment`)
+- **Frontend**: `CareerQuizModal` (домен → 10 вопросов → loading → close), `CareerPathResult` (3 карточки с роадмапом accordion, pros/cons), секция в analytics-content.tsx
+- **Тесты**: 14 frontend (career-scoring: compute/match/select) + 7 backend (service: cache, NotFoundException, DB, ordering)
+- **Константы**: `career-questions.ts` (60 вопросов в банке), `career-paths.ts` (30 путей)
+
+### Resume → Profile Auto-Fill (2026-04-25) ✅
+- **Утилиты**: `map-parsed-to-profile.ts` (smart-merge: заполняет только пустые поля), `profile-completeness.ts` (7 полей, веса суммируются в 100)
+- **`ProfileCompletenessCard`** — карточка с прогрессбаром и чипами пропущенных полей, отображается до 100% на странице профиля
+- **`ResumeImportModal`** — 3-шаговый модал (Upload → Preview → Success), переиспользует `useUploadResume` + `useUpdateProfile`
+- **Баннер в `MainLayout`** — появляется при score < 70%, dismissible через sessionStorage
+- **Кнопка "Импорт из резюме"** — в заголовке страницы `/profile`
+- **Тесты**: `frontend/src/features/profile/__tests__/profile-utils.test.ts` — 16 тестов (jest + ts-jest)
+- **Удалён** старый `handleFileUpload` + `fileInputRef` из `profile-content.tsx` (заполнял только локальный стейт, не сохранял в БД)
+- ParsedProfileDto расширен полем `careerGoals?`
+
 ### Поведенческие сигналы (2026-04-24) ✅
 - **Модель**: `VacancyInteraction` (profileId, vacancyId, type: click/apply/favorite/analyze/dismiss) — unique per (profile, vacancy, type)
 - **Миграция**: `20260424000002_add_vacancy_interactions`

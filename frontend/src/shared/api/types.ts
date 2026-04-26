@@ -47,8 +47,9 @@ export interface ParsedProfileDto {
     experienceYears?: number;
     skills?: string[];
     education?: any[];
-    workExperience?: any[];
+    workExperience?: Array<{ company: string; position: string; duration: string; description?: string }>;
     aboutMe?: string;
+    careerGoals?: string;
 }
 
 // AI ReAct Chat types

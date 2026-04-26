@@ -8,6 +8,7 @@ import { CareerChatChain } from './langchain/career-chat.chain';
 import { VacancyAnalysisChain } from './langchain/vacancy-analysis.chain';
 import { InterviewPrepChain } from './langchain/interview-prep.chain';
 import { CoverLetterChain } from './langchain/cover-letter.chain';
+import { CareerPathChain } from './langchain/career-path.chain';
 
 const AI_CACHE_TTL = 24 * 60 * 60;
 
@@ -337,5 +338,74 @@ ${resumeContent}
                 : `Добрый день!\n\nХочу откликнуться на вакансию ${vacancy?.title} в компании ${vacancy?.employer}.\n\nС уважением`;
             return { coverLetter: fallback };
         }
+    }
+
+    async generateCareerPathAnalysis(prompt: string): Promise<any> {
+        const llm = this.llmProvider.chat;
+        if (!llm) {
+            this.logger.warn('LLM_API_KEY is not set. Using mocked career assessment.');
+            return this.getMockCareerResult();
+        }
+        try {
+            const chain = new CareerPathChain(llm);
+            return await chain.invoke({ prompt });
+        } catch (error: any) {
+            this.logger.error(`LLM Error generating career paths: ${error.message}`);
+            return this.getMockCareerResult();
+        }
+    }
+
+    private getMockCareerResult(): any {
+        return {
+            personalitySummary: 'По результатам теста вы — аналитик с технической направленностью. Вам близка работа с данными и системами, предпочитаете глубокий фокус над широкими коммуникациями. (Mock Mode)',
+            dominantTraits: ['Аналитический', 'Технический', 'Структурированный'],
+            topPaths: [
+                {
+                    rank: 1, role: 'Backend Developer', domain: 'it', matchScore: 92,
+                    matchReason: 'Ваш аналитический склад ума и техническая ориентация идеально подходят для backend-разработки. (Mock)',
+                    roadmap: [
+                        { level: 'Junior', timeframe: '0-1 год', skills: ['Node.js', 'SQL', 'Git'], description: 'Изучаете основы серверной разработки, работаете с простыми CRUD-операциями.' },
+                        { level: 'Middle', timeframe: '1-3 года', skills: ['System Design', 'Redis', 'Docker'], description: 'Проектируете самостоятельные сервисы, начинаете понимать архитектуру систем.' },
+                        { level: 'Senior', timeframe: '3-6 лет', skills: ['Microservices', 'Kafka', 'k8s'], description: 'Ведёте сложные технические решения, менторите junior-разработчиков.' },
+                        { level: 'Lead/Staff', timeframe: '6+ лет', skills: ['Architecture', 'Team Leadership'], description: 'Определяете технологический стек, влияете на roadmap продукта.' },
+                    ],
+                    currentSkillsMatch: ['TypeScript', 'Node.js'],
+                    skillsToLearn: ['PostgreSQL', 'Docker', 'System Design'],
+                    salaryRange: '150 000 — 350 000 ₽',
+                    pros: ['Высокий спрос на рынке', 'Техническая глубина'],
+                    cons: ['Меньше взаимодействия с пользователями'],
+                },
+                {
+                    rank: 2, role: 'Data Scientist', domain: 'it', matchScore: 85,
+                    matchReason: 'Работа с данными и паттернами соответствует вашему аналитическому профилю. (Mock)',
+                    roadmap: [
+                        { level: 'Junior', timeframe: '0-1 год', skills: ['Python', 'pandas', 'SQL'], description: 'Анализируете данные, строите базовые модели.' },
+                        { level: 'Middle', timeframe: '1-3 года', skills: ['scikit-learn', 'Spark', 'A/B тесты'], description: 'Самостоятельно ведёте ML-проекты от гипотезы до продакшена.' },
+                        { level: 'Senior', timeframe: '3-6 лет', skills: ['Deep Learning', 'MLOps', 'LLMs'], description: 'Разрабатываете сложные ML-системы, влияете на бизнес-метрики.' },
+                        { level: 'Lead/Staff', timeframe: '6+ лет', skills: ['ML Strategy', 'Team Building'], description: 'Выстраиваете ML-платформу компании, управляете командой.' },
+                    ],
+                    currentSkillsMatch: ['Python', 'SQL'],
+                    skillsToLearn: ['Machine Learning', 'Statistics', 'Spark'],
+                    salaryRange: '180 000 — 400 000 ₽',
+                    pros: ['Перспективная область', 'Разнообразие задач'],
+                    cons: ['Требует сильной математической базы'],
+                },
+                {
+                    rank: 3, role: 'Solutions Architect', domain: 'it', matchScore: 79,
+                    matchReason: 'Системное мышление и структурированность — ключевые качества для архитектора. (Mock)',
+                    roadmap: [
+                        { level: 'Senior Dev', timeframe: '0-3 года', skills: ['System Design', 'Cloud', 'Patterns'], description: 'Необходимо сначала стать Senior Developer в одном из направлений.' },
+                        { level: 'Tech Lead', timeframe: '3-5 лет', skills: ['Architecture patterns', 'Trade-offs'], description: 'Принимаете технические решения на уровне команды.' },
+                        { level: 'Architect', timeframe: '5-8 лет', skills: ['AWS/GCP', 'Distributed systems'], description: 'Проектируете архитектуру крупных систем и платформ.' },
+                        { level: 'Principal', timeframe: '8+ лет', skills: ['Strategy', 'CTO track'], description: 'Определяете техническую стратегию компании или крупного продукта.' },
+                    ],
+                    currentSkillsMatch: ['System Design', 'TypeScript'],
+                    skillsToLearn: ['Cloud Architecture', 'Distributed Systems', 'Business Strategy'],
+                    salaryRange: '250 000 — 600 000 ₽',
+                    pros: ['Высокий уровень влияния', 'Разнообразие задач'],
+                    cons: ['Долгий путь к позиции'],
+                },
+            ],
+        };
     }
 }

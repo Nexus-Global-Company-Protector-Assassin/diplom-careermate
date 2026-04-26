@@ -9,6 +9,7 @@ import { InterviewsModule } from './modules/interviews/interviews.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AiModule } from './modules/ai/ai.module';
 import { SkillsModule } from './modules/skills/skills.module';
+import { CareerAssessmentModule } from './modules/career-assessment/career-assessment.module';
 import { HealthController } from './health.controller';
 import { AppController } from './app.controller';
 import { UsersModule } from './modules/users/users.module';
@@ -36,6 +37,7 @@ import { MetricsModule } from './modules/metrics/metrics.module';
         AnalyticsModule,
         AiModule,
         SkillsModule,
+        CareerAssessmentModule,
     ],
     controllers: [HealthController, AppController],
     providers: [],

@@ -3,7 +3,10 @@
 import { useState } from "react"
 import { Card, CardContent } from "@/shared/ui/card"
 import { Button } from "@/shared/ui/button"
-import { TrendingUp, TrendingDown, Lightbulb, Code, Clock, Eye } from "lucide-react"
+import { TrendingUp, TrendingDown, Lightbulb, Code, Clock, Eye, Rocket } from "lucide-react"
+import { CareerQuizModal } from "@/features/analytics/career-quiz-modal"
+import { CareerPathResult } from "@/features/analytics/career-path-result"
+import { useLatestAssessment } from "@/features/analytics/api/use-career-assessment"
 import {
   LineChart,
   Line,
@@ -55,6 +58,8 @@ const tips = [
 export function AnalyticsContent() {
   const [activePeriod, setActivePeriod] = useState<Period>("week")
   const { data: statsData, isLoading } = useAnalyticsStats(activePeriod)
+  const { data: latestAssessment } = useLatestAssessment()
+  const [quizOpen, setQuizOpen] = useState(false)
 
   const currentStats = statsData?.statsCards || [
     { value: "0", label: "Отправлено откликов", change: "Нет данных", positive: true },
@@ -190,6 +195,40 @@ export function AnalyticsContent() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Career Paths */}
+      {latestAssessment ? (
+        <CareerPathResult
+          assessment={latestAssessment}
+          onRetake={() => setQuizOpen(true)}
+        />
+      ) : (
+        <Card className="border-border bg-card">
+          <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
+              <Rocket className="h-6 w-6 text-blue-500" />
+            </div>
+            <div className="flex-1 space-y-1">
+              <h2 className="text-base font-semibold text-foreground">Карьерные пути</h2>
+              <p className="text-sm text-muted-foreground">
+                Пройдите тест из 10 вопросов — AI определит лучшие карьерные пути и построит детальный роадмап роста.
+              </p>
+            </div>
+            <Button
+              onClick={() => setQuizOpen(true)}
+              className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Пройти тест
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <CareerQuizModal
+        open={quizOpen}
+        onOpenChange={setQuizOpen}
+        onComplete={() => setQuizOpen(false)}
+      />
     </div>
   )
 }
