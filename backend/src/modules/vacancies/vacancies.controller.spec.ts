@@ -13,6 +13,9 @@ describe('VacanciesController', () => {
             getVacancies: jest.fn().mockResolvedValue([{ id: 'v1' }]),
             searchAndSave: jest.fn().mockResolvedValue([{ id: 'v2' }]),
             getRecommendedForProfile: jest.fn().mockResolvedValue([]),
+            getFavorites: jest.fn().mockResolvedValue(['v1']),
+            toggleFavorite: jest.fn().mockResolvedValue({ isFavorite: true }),
+            recordInteraction: jest.fn().mockResolvedValue(undefined),
             interviewPrep: jest.fn().mockResolvedValue({ questions: [] }),
             evaluateVacancy: jest.fn().mockResolvedValue({ grade: 'B' }),
             generateCoverLetter: jest.fn().mockResolvedValue({ coverLetter: 'text' }),
@@ -64,18 +67,15 @@ describe('VacanciesController', () => {
         expect(Array.isArray(result)).toBe(true);
     });
 
-    it('should return responses (stub)', () => {
-        const result = controller.getResponses();
-        expect(Array.isArray(result)).toBe(true);
+    it('should return favorite vacancy IDs', async () => {
+        const result = await controller.getFavorites(mockUser);
+        expect(service.getFavorites).toHaveBeenCalledWith(mockUser.userId);
+        expect(result).toEqual(['v1']);
     });
 
-    it('should mock applyToVacancy', () => {
-        const result = controller.applyToVacancy({ vacancyId: '123' });
-        expect(result).toHaveProperty('success', true);
-    });
-
-    it('should mock toggleFavorite', () => {
-        const result = controller.toggleFavorite({ vacancyId: '123', isFavorite: true });
+    it('should toggle favorite vacancy', async () => {
+        const result = await controller.toggleFavorite(mockUser, { vacancyId: 'v1' });
+        expect(service.toggleFavorite).toHaveBeenCalledWith('v1', mockUser.userId);
         expect(result).toHaveProperty('isFavorite', true);
     });
 
@@ -95,9 +95,7 @@ describe('VacanciesController', () => {
     });
 
     it('should pass userId to recordInteraction', async () => {
-        const mockRecordInteraction = jest.fn().mockResolvedValue(undefined);
-        (service as any).recordInteraction = mockRecordInteraction;
         await controller.trackInteraction(mockUser, 'vacancy-1', { type: 'click' });
-        expect(mockRecordInteraction).toHaveBeenCalledWith('vacancy-1', 'click', mockUser.userId);
+        expect(service.recordInteraction).toHaveBeenCalledWith('vacancy-1', 'click', mockUser.userId);
     });
 });

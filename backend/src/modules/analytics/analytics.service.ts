@@ -15,15 +15,15 @@ export class AnalyticsService {
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         const profileId = await this.getProfileIdForUser(userId);
 
-        const [vacancyCount, interviewCount, responseCount, aiResumeCount] = await Promise.all([
+        const [vacancyCount, interviewCount, favoritesCount, aiResumeCount] = await Promise.all([
             this.prisma.vacancy.count({
                 where: { createdAt: { gte: oneWeekAgo } },
             }),
             this.prisma.interview.count({
                 where: { status: 'upcoming', ...(profileId && { profileId }) },
             }),
-            this.prisma.vacancyResponse.count({
-                where: { responseDate: { gte: oneWeekAgo }, ...(profileId && { profileId }) },
+            this.prisma.favoriteVacancy.count({
+                where: { createdAt: { gte: oneWeekAgo }, ...(profileId && { profileId }) },
             }),
             this.prisma.resume.count({
                 where: {
@@ -37,7 +37,7 @@ export class AnalyticsService {
         return [
             { icon: '📋', value: String(vacancyCount), label: 'Новые вакансии' },
             { icon: '🗓️', value: String(interviewCount), label: 'Интервью назначено' },
-            { icon: '📧', value: String(responseCount), label: 'Откликов отправлено' },
+            { icon: '❤️', value: String(favoritesCount), label: 'Сохранено в избранное' },
             { icon: '🤖', value: String(aiResumeCount), label: 'Рекомендации ИИ' },
         ];
     }
@@ -48,7 +48,7 @@ export class AnalyticsService {
             include: {
                 resumes: true,
                 interviews: true,
-                vacancyResponses: true,
+                favoriteVacancies: true,
             },
         });
 
@@ -59,7 +59,7 @@ export class AnalyticsService {
         // Career progress calculation
         const hasProfile = !!(profile.fullName && profile.desiredPosition);
         const hasResume = profile.resumes.length > 0;
-        const hasResponses = profile.vacancyResponses.length > 0;
+        const hasFavorites = profile.favoriteVacancies.length > 0;
         const hasInvitations = profile.interviews.length > 0;
 
         // Profile completion calculation
@@ -75,7 +75,7 @@ export class AnalyticsService {
         ];
 
         // Achievement calculation
-        const totalResponses = profile.vacancyResponses.length;
+        const totalFavorites = profile.favoriteVacancies.length;
         const totalInterviews = profile.interviews.length;
         const totalResumes = profile.resumes.filter(r => r.type === 'resume').length;
         const completedCount = completionFields.filter(f => f.completed).length;
@@ -87,8 +87,8 @@ export class AnalyticsService {
                 unlocked: hasResume, progress: totalResumes, maxProgress: 1, color: 'text-yellow-500',
             },
             {
-                id: '2', name: 'Активный соискатель', description: 'Отправить 10 откликов',
-                unlocked: totalResponses >= 10, progress: Math.min(totalResponses, 10), maxProgress: 10, color: 'text-blue-500',
+                id: '2', name: 'Исследователь', description: 'Сохранить 10 вакансий в избранное',
+                unlocked: totalFavorites >= 10, progress: Math.min(totalFavorites, 10), maxProgress: 10, color: 'text-blue-500',
             },
             {
                 id: '3', name: 'Целеустремлённый', description: 'Установить карьерную цель',
@@ -122,7 +122,7 @@ export class AnalyticsService {
             careerProgress: [
                 { label: 'Анализ завершен', done: hasProfile },
                 { label: 'Резюме готово', done: hasResume },
-                { label: 'Отклики идут', done: hasResponses },
+                { label: 'Вакансии сохранены', done: hasFavorites },
                 { label: 'Приглашения', done: hasInvitations },
             ],
             profileCompletion: completionFields,
@@ -377,7 +377,7 @@ export class AnalyticsService {
             careerProgress: [
                 { label: 'Анализ завершен', done: false },
                 { label: 'Резюме готово', done: false },
-                { label: 'Отклики идут', done: false },
+                { label: 'Вакансии сохранены', done: false },
                 { label: 'Приглашения', done: false },
             ],
             profileCompletion: [

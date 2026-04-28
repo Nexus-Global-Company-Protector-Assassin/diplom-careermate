@@ -118,22 +118,19 @@ export class VacanciesController {
         await this.vacanciesService.recordInteraction(vacancyId, body.type, user.userId);
     }
 
-    @Get('responses')
-    @ApiOperation({ summary: 'Get user responses (stub)' })
-    getResponses() {
-        return [];
-    }
-
-    @Post('responses')
-    @ApiOperation({ summary: 'Apply to a vacancy (stub)' })
-    applyToVacancy(@Body() body: { vacancyId: string; coverLetter?: string }) {
-        return { success: true, vacancyId: body.vacancyId, status: 'Отправлено' };
+    @Get('favorites')
+    @ApiOperation({ summary: 'Get favorite vacancy IDs for current user' })
+    getFavorites(@CurrentUser() user: { userId: string }) {
+        return this.vacanciesService.getFavorites(user.userId);
     }
 
     @Post('favorites')
-    @ApiOperation({ summary: 'Toggle favorite vacancy (stub)' })
-    toggleFavorite(@Body() body: { vacancyId: string; isFavorite: boolean }) {
-        return { success: true, vacancyId: body.vacancyId, isFavorite: body.isFavorite };
+    @ApiOperation({ summary: 'Toggle favorite vacancy' })
+    toggleFavorite(
+        @CurrentUser() user: { userId: string },
+        @Body() body: { vacancyId: string },
+    ) {
+        return this.vacanciesService.toggleFavorite(body.vacancyId, user.userId);
     }
 
     @Get(':id/interview-prep')
@@ -174,4 +171,3 @@ export class VacanciesController {
         return this.vacanciesService.generateCoverLetter(id, resumeId, language, user.userId);
     }
 }
-

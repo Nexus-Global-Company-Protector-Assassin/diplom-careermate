@@ -4,6 +4,7 @@ import { CareerAssessmentService } from './career-assessment.service';
 import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { AiService } from '../ai/ai.service';
+import { QuotaService } from '../quota/quota.service';
 
 const mockProfile = {
     id: 'profile-uuid-1',
@@ -64,6 +65,7 @@ describe('CareerAssessmentService', () => {
                 { provide: PrismaService, useValue: mockPrisma },
                 { provide: RedisService, useValue: mockRedis },
                 { provide: AiService, useValue: mockAiService },
+                { provide: QuotaService, useValue: { assertAiCall: jest.fn().mockResolvedValue(undefined), commitAiCall: jest.fn().mockResolvedValue(undefined), assertQuizLimit: jest.fn().mockResolvedValue(undefined) } },
             ],
         }).compile();
 

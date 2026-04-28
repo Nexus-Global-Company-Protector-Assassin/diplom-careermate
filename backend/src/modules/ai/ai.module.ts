@@ -3,9 +3,10 @@ import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { DatabaseModule } from '../../database/database.module';
 import { LlmProviderService } from './providers/llm-provider.service';
+import { QuotaModule } from '../quota/quota.module';
 
 @Module({
-    imports: [DatabaseModule],
+    imports: [DatabaseModule, QuotaModule],
     controllers: [AiController],
     providers: [AiService, LlmProviderService],
     exports: [AiService],

@@ -3,11 +3,18 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { firstValueFrom } from 'rxjs';
+import { createHash } from 'crypto';
+import { KnowledgeGraphService } from './knowledge-graph.service';
+import { SkillClassifierService } from './skill-classifier.service';
+import { RedisService } from '../redis/redis.service';
+
+const EXPANDED_SKILLS_TTL = 600; // 10 minutes
 
 export interface SkillGapResult {
     matchedSkills: Array<{ id: string; name: string; category?: string | null }>;
     missingSkills: Array<{ id: string; name: string; category?: string | null }>;
-    matchScore: number; // 0–100 Jaccard-based
+    matchScore: number;       // 0–100 Jaccard-based
+    semanticScore?: number;   // 0–1 cosine similarity between skill vectors (Phase 2)
 }
 
 // Normalize raw skill name to canonical form (removes spaces, dots, lowercase)
@@ -40,10 +47,32 @@ export class SkillsService implements OnModuleInit {
         private readonly prisma: PrismaService,
         private readonly httpService: HttpService,
         private readonly configService: ConfigService,
+        private readonly knowledgeGraph: KnowledgeGraphService,
+        private readonly classifier: SkillClassifierService,
+        private readonly redis: RedisService,
     ) {}
 
     async onModuleInit() {
         await this.loadCache();
+        // Fire-and-forget: populate KG from Prisma skills if graph is empty
+        void this.knowledgeGraph
+            .seedIfEmpty(this.getCachedSkills())
+            .catch((e: Error) => this.logger.warn(`KG auto-seed error: ${e.message}`));
+    }
+
+    /**
+     * Returns unique skills from in-memory cache for KG seeding.
+     */
+    private getCachedSkills() {
+        const seen = new Set<string>();
+        const result: Array<{ id: string; name: string; category: string | null; aliases: string[] }> = [];
+        for (const cached of this.skillsCache.values()) {
+            if (!seen.has(cached.id)) {
+                seen.add(cached.id);
+                result.push({ id: cached.id, name: cached.name, category: cached.category, aliases: cached.aliases });
+            }
+        }
+        return result;
     }
 
     /**
@@ -52,7 +81,7 @@ export class SkillsService implements OnModuleInit {
     private async loadCache() {
         this.logger.log('Loading skills taxonomy into memory...');
         const skills = await this.prisma.skill.findMany();
-       
+
         this.skillsCache.clear();
         for (const skill of skills) {
             const cached: CachedSkill = {
@@ -62,7 +91,7 @@ export class SkillsService implements OnModuleInit {
                 normalizedName: normalizeSkillName(skill.name),
                 aliases: skill.aliases.map(normalizeSkillName),
             };
-           
+
             // Map canonical name
             this.skillsCache.set(cached.normalizedName, cached);
             // Map aliases
@@ -70,40 +99,80 @@ export class SkillsService implements OnModuleInit {
                 this.skillsCache.set(alias, cached);
             }
         }
-       
+
         // Prepare sorted names (longest first) for dictionary extraction to prefer 'React Native' over 'React'
         this.sortedSkillNames = Array.from(this.skillsCache.keys()).sort((a, b) => b.length - a.length);
-       
+
         this.logger.log(`Loaded ${skills.length} canonical skills into cache.`);
     }
 
     /**
-     * Find existing skill by name or alias from cache, or create a new canonical record in DB.
+     * Find existing skill by name/alias from cache; if unknown — resolve via Neo4j KG + LLM classifier.
+     *
+     * Fast path (cache hit): O(1), no I/O.
+     * Slow path (cache miss): Neo4j vector similarity → LLM classification → Prisma upsert → KG upsert.
      */
     async findOrCreate(rawName: string, category?: string): Promise<{ id: string; name: string; category: string | null }> {
         const normalized = normalizeSkillName(rawName);
-       
-        // 1. Check in-memory cache (extremely fast)
+
+        // 1. Fast path: in-memory cache (handles 99% of calls)
         const cached = this.skillsCache.get(normalized);
         if (cached) {
             return { id: cached.id, name: cached.name, category: cached.category };
         }
 
-        // 2. If not found, upsert canonical skill (upsert prevents P2002 race conditions)
-        const canonical = rawName.charAt(0).toUpperCase() + rawName.slice(1).trim();
-        this.logger.debug(`Upserting skill: "${canonical}" (normalized: "${normalized}")`);
+        // 2. Slow path: resolve via Knowledge Graph + LLM
+        let canonicalName: string;
+        let resolvedCategory: string;
+        let aliases: string[] = [];
 
+        const embedding = await this.knowledgeGraph.generateEmbedding(rawName);
+
+        if (embedding) {
+            const similar = await this.knowledgeGraph.findSimilarSkill(embedding);
+            if (similar) {
+                // Semantically close match found in graph — use its canonical form
+                this.logger.debug(`KG match: "${rawName}" → "${similar.name}" (score: ${similar.score?.toFixed(3)})`);
+                canonicalName = similar.name;
+                resolvedCategory = similar.category;
+            } else {
+                // Novel skill — classify with lightweight LLM
+                this.logger.debug(`KG miss: "${rawName}" → classifying with LLM`);
+                const classified = await this.classifier.classifySkill(rawName);
+                canonicalName = classified.canonicalName;
+                resolvedCategory = category || classified.category;
+                aliases = classified.aliases;
+            }
+        } else {
+            // No embedding API available — simple capitalize fallback
+            canonicalName = rawName.charAt(0).toUpperCase() + rawName.slice(1).trim();
+            resolvedCategory = category || 'Other';
+        }
+
+        // 3. Upsert to Prisma (required for FK integrity in ProfileSkill / VacancySkill)
         const newSkill = await this.prisma.skill.upsert({
-            where: { name: canonical },
+            where: { name: canonicalName },
             update: {},
             create: {
-                name: canonical,
-                category: category || 'Other',
-                aliases: normalized !== canonical.toLowerCase() ? [normalized] : [],
+                name: canonicalName,
+                category: resolvedCategory,
+                aliases: normalized !== canonicalName.toLowerCase() ? [normalized, ...aliases] : aliases,
             },
         });
 
-        // 3. Update cache dynamically
+        // 4. Upsert to Neo4j knowledge graph with embedding for future vector search
+        if (embedding) {
+            await this.knowledgeGraph.upsertSkill({
+                id: newSkill.id,
+                name: newSkill.name,
+                category: newSkill.category ?? resolvedCategory,
+                aliases: newSkill.aliases,
+                embedding,
+                source: 'llm_classified',
+            });
+        }
+
+        // 5. Update in-memory cache
         const newCached: CachedSkill = {
             id: newSkill.id,
             name: newSkill.name,
@@ -146,7 +215,7 @@ export class SkillsService implements OnModuleInit {
 Rules:
 - "react.js", "reactjs", "ReactJS" → "React"
 - "k8s" → "Kubernetes"
-- "postgres" / "postgresql" / "PostgreSQL" → "PostgreSQL" 
+- "postgres" / "postgresql" / "PostgreSQL" → "PostgreSQL"
 - "nodejs" / "node.js" → "Node.js"
 - Omit soft skills (communication, teamwork) unless explicitly stated as a requirement
 - Assign a category: "Frontend" | "Backend" | "DevOps" | "Data" | "Mobile" | "Database" | "Tools"
@@ -204,7 +273,7 @@ ${text.slice(0, 3000)}`;
                 const before = idx > 0 ? lower[idx - 1] : ' ';
                 const after = idx + normalizedKey.length < lower.length ? lower[idx + normalizedKey.length] : ' ';
                 const isBoundary = (c: string) => /[\s,;.()\[\]{}\-\/"'!?:&|<>]/.test(c);
-               
+
                 if (isBoundary(before) && isBoundary(after)) {
                     found.push({ name: cached.name, category: cached.category ?? undefined });
                     seen.add(cached.id);
@@ -217,14 +286,15 @@ ${text.slice(0, 3000)}`;
 
     /**
      * Sync profile's normalized skills after profile create/update.
-     * Replaces all existing ProfileSkill records for this profile.
+     * Replaces all existing ProfileSkill records for this profile and
+     * creates (:User)-[:HAS_SKILL]->(:Skill) relationships in Neo4j.
      */
     async syncProfileSkills(profileId: string, rawSkills: string[]): Promise<void> {
         if (!rawSkills || rawSkills.length === 0) return;
 
         this.logger.log(`Syncing ${rawSkills.length} skills for profile ${profileId}`);
 
-        // Resolve/create canonical skills
+        // Resolve/create canonical skills (may trigger KG lookup + LLM classification)
         const skillRecords = await Promise.all(rawSkills.map(s => this.findOrCreate(s)));
 
         // Replace in DB atomically
@@ -236,11 +306,74 @@ ${text.slice(0, 3000)}`;
             }),
         ]);
 
+        // Mirror to Neo4j: (:User)-[:HAS_SKILL]->(:Skill) + compute skill vector
+        const skillIds = skillRecords.map(s => s.id);
+        void this.knowledgeGraph.syncUserSkills(profileId, skillIds)
+            .then(() => this.knowledgeGraph.computeProfileVector(profileId))
+            .catch((e: Error) => this.logger.warn(`KG user sync failed: ${e.message}`));
+
         this.logger.log(`Synced ${skillRecords.length} normalized skills for profile ${profileId}`);
     }
 
     /**
-     * Sync vacancy's normalized skills when vacancy is saved from Adzuna.
+     * Returns expanded skill names for soft matching, with Redis cache (10 min TTL).
+     *
+     * Combines:
+     *   • IS_A chain traversal — TypeScript IS_A JavaScript (higher precision, listed first)
+     *   • CO_OCCURS_WITH traversal — decay-weighted graph neighbors
+     *
+     * Cache key is order-independent (sorted skill IDs) so the same profile skills
+     * always hit the same cache entry regardless of input order.
+     */
+    async getExpandedSkillNames(skillNames: string[], limit = 20): Promise<string[]> {
+        const skillIds = skillNames
+            .map((n) => this.skillsCache.get(normalizeSkillName(n))?.id)
+            .filter((id): id is string => Boolean(id));
+
+        if (skillIds.length === 0) return [];
+
+        // MD5 hash keeps keys short regardless of how many skill IDs the profile has
+        const keyHash = createHash('md5').update([...skillIds].sort().join(',')).digest('hex');
+        const cacheKey = `kg:expanded:v1:${keyHash}:${limit}`;
+
+        try {
+            const cached = await this.redis.get(cacheKey);
+            if (cached) return JSON.parse(cached) as string[];
+        } catch {
+            // Redis unavailable — proceed without cache
+        }
+
+        const [coOccurrence, isA] = await Promise.all([
+            this.knowledgeGraph.getExpandedSkills(skillIds, limit),
+            this.knowledgeGraph.getIsAExpansion(skillIds),
+        ]);
+
+        const seen = new Set<string>();
+        const merged: string[] = [];
+        for (const s of [...isA, ...coOccurrence]) {
+            if (!seen.has(s.name)) { seen.add(s.name); merged.push(s.name); }
+        }
+        const result = merged.slice(0, limit);
+
+        try {
+            await this.redis.set(cacheKey, JSON.stringify(result), EXPANDED_SKILLS_TTL);
+        } catch {
+            // Redis unavailable — skip caching
+        }
+
+        return result;
+    }
+
+    /**
+     * Returns top skills by market demand score (0–100) from the KG.
+     */
+    async getMarketDemand(topN = 50) {
+        return this.knowledgeGraph.getMarketDemand(topN);
+    }
+
+    /**
+     * Sync vacancy's normalized skills when vacancy is saved.
+     * Also records co-occurrence edges in the Knowledge Graph.
      */
     async syncVacancySkills(vacancyId: string, rawSkills: string[]): Promise<void> {
         if (!rawSkills || rawSkills.length === 0) return;
@@ -254,11 +387,18 @@ ${text.slice(0, 3000)}`;
                 skipDuplicates: true,
             }),
         ]);
+
+        const skillIds = skillRecords.map(s => s.id);
+
+        // Learn co-occurrence + create Vacancy node in KG + compute vacancy vector
+        await this.knowledgeGraph.recordCoOccurrence(skillIds);
+        void this.knowledgeGraph.upsertVacancyNode(vacancyId, skillIds)
+            .then(() => this.knowledgeGraph.computeVacancyVector(vacancyId))
+            .catch((e: Error) => this.logger.warn(`KG vacancy sync failed: ${e.message}`));
     }
 
     /**
      * Compute normalized skill gap between a profile and a vacancy using DB joins.
-     * This replaces the old string-based comparison in vacancies.service.ts.
      */
     async getSkillGap(profileId: string, vacancyId: string): Promise<SkillGapResult> {
         const [profileSkills, vacancySkills] = await Promise.all([
@@ -289,7 +429,12 @@ ${text.slice(0, 3000)}`;
             ? Math.round((matchedSkills.length / unionSize) * 100)
             : 0;
 
-        return { matchedSkills, missingSkills, matchScore };
+        // Semantic cosine similarity between stored skill vectors (Phase 2)
+        const semanticScore = await this.knowledgeGraph
+            .getSemanticMatch(profileId, vacancyId)
+            .catch(() => undefined);
+
+        return { matchedSkills, missingSkills, matchScore, ...(semanticScore != null ? { semanticScore } : {}) };
     }
 
     /**
@@ -348,4 +493,3 @@ ${text.slice(0, 3000)}`;
         return { profilesMigrated, vacanciesMigrated };
     }
 }
-

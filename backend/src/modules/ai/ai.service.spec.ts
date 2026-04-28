@@ -4,10 +4,12 @@ import { AiService } from './ai.service';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { LlmProviderService } from './providers/llm-provider.service';
+import { RedisService } from '../redis/redis.service';
 
 const makeConfig = () => ({ get: jest.fn().mockReturnValue(null) });
 const makePrisma = () => ({ profile: { findFirst: jest.fn().mockResolvedValue(null) } });
 const makeLlmProvider = () => ({ chat: null }); // null → mock mode
+const makeRedis = () => ({ get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue('OK') });
 
 describe('AiService', () => {
     let service: AiService;
@@ -22,6 +24,7 @@ describe('AiService', () => {
                 { provide: ConfigService, useValue: makeConfig() },
                 { provide: PrismaService, useValue: makePrisma() },
                 { provide: LlmProviderService, useValue: makeLlmProvider() },
+                { provide: RedisService, useValue: makeRedis() },
             ],
         }).compile();
 

@@ -60,6 +60,7 @@ model Profile {
   profileSkills         ProfileSkill[]
   vacancyInteractions   VacancyInteraction[]
   careerAssessments     CareerAssessment[]
+  favoriteVacancies     FavoriteVacancy[]
 }
 
 model AnalysisResult {
@@ -136,6 +137,19 @@ model Vacancy {
 
   vacancySkills      VacancySkill[]
   interactions       VacancyInteraction[]
+  favorites          FavoriteVacancy[]
+}
+
+model FavoriteVacancy {
+  profileId String
+  vacancyId String
+  createdAt DateTime @default(now())
+
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  vacancy   Vacancy  @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, vacancyId])
+  @@index([profileId])
 }
 
 // Behavioral signals — tracks candidate interactions with vacancies

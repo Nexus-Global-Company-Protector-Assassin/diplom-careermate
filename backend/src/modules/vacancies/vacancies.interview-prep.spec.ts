@@ -10,6 +10,7 @@ import { VacanciesService } from './vacancies.service';
 import { UserPreferencesService } from './user-preferences.service';
 import { RedisService } from '../redis/redis.service';
 import { MlRankingService } from '../ml/ml-ranking.service';
+import { QuotaService } from '../quota/quota.service';
 
 describe('VacanciesService interviewPrep', () => {
     let service: VacanciesService;
@@ -47,6 +48,7 @@ describe('VacanciesService interviewPrep', () => {
                 { provide: UserPreferencesService, useValue: { compute: jest.fn(), extractVacancyFeatures: jest.fn(), computePersonalScore: jest.fn().mockReturnValue(0), invalidateCache: jest.fn() } },
                 { provide: RedisService, useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() } },
                 { provide: MlRankingService, useValue: { isEnabled: jest.fn().mockReturnValue(false), isShadowMode: jest.fn().mockReturnValue(true), rank: jest.fn().mockResolvedValue(new Map()) } },
+                { provide: QuotaService, useValue: { assertAiCall: jest.fn().mockResolvedValue(undefined), commitAiCall: jest.fn().mockResolvedValue(undefined) } },
             ],
         }).compile();
 

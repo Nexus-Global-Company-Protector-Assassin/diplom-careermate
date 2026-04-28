@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { AiService } from '../ai/ai.service';
+import { QuotaService } from '../quota/quota.service';
 
 @Injectable()
 export class ResumesService {
@@ -9,6 +10,7 @@ export class ResumesService {
         private readonly prisma: PrismaService,
         private readonly storage: StorageService,
         private readonly aiService: AiService,
+        private readonly quota: QuotaService,
     ) {}
 
     private async getProfileIdForUser(userId: string): Promise<string> {
@@ -81,7 +83,9 @@ export class ResumesService {
             ].filter(Boolean).join('\n')
             : `Кандидат на позицию ${position}${keyPoints ? `\nКлючевые моменты: ${keyPoints}` : ''}`;
 
+        if (userId) await this.quota.assertAiCall(userId);
         const { coverLetter } = await this.aiService.generateCoverLetter(vacancy, resumeContent, 'ru');
+        if (userId) void this.quota.commitAiCall(userId);
 
         try {
             const profileId = userId ? await this.getProfileIdForUser(userId) : null;
@@ -104,6 +108,7 @@ export class ResumesService {
     }
 
     async saveResume(title: string, subtitle?: string, content?: string, type: string = 'resume', reviewData?: any, userId?: string) {
+        if (userId && type !== 'cover_letter') await this.quota.assertResumeLimit(userId);
         const profileId = await this.getProfileIdForUser(userId!);
         return this.prisma.resume.create({
             data: {
@@ -119,6 +124,7 @@ export class ResumesService {
     }
 
     async uploadResumeFile(file: Express.Multer.File, title: string, userId?: string) {
+        if (userId) await this.quota.assertResumeLimit(userId);
         const profileId = await this.getProfileIdForUser(userId!);
         const ext = file.originalname.split('.').pop() || 'pdf';
         const key = `resumes/${profileId}/${crypto.randomUUID()}.${ext}`;

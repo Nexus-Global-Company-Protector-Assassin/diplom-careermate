@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
+import { QuotaService } from '../quota/quota.service';
 
 const USER_ID = 'user-uuid-1';
 const mockUser = { userId: USER_ID, email: 'test@test.com' };
@@ -21,6 +22,10 @@ describe('AiController', () => {
                 {
                     provide: AiService,
                     useValue: mockService,
+                },
+                {
+                    provide: QuotaService,
+                    useValue: { assertAiCall: jest.fn().mockResolvedValue(undefined), commitAiCall: jest.fn().mockResolvedValue(undefined) },
                 },
             ],
         })

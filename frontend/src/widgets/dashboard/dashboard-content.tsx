@@ -23,7 +23,9 @@ import { Achievements } from "@/widgets/dashboard/achievements"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { Input } from "@/shared/ui/input"
 import { Label } from "@/shared/ui/label"
-import { useWeeklyAnalytics, useDashboardSummary } from "./api/use-analytics"
+import { useWeeklyAnalytics, useDashboardSummary, analyticsKeys } from "./api/use-analytics"
+import { useProfile, useUpdateProfile } from "@/features/profile/api/use-profile"
+import { useQueryClient } from "@tanstack/react-query"
 
 const quickActions = [
   { icon: FileText, label: "Создать резюме", color: "bg-blue-500/10 text-blue-600", href: "/resume" },
@@ -42,6 +44,9 @@ interface CareerGoal {
 export function DashboardContent() {
   const { data: analyticsStats } = useWeeklyAnalytics()
   const { data: dashboard } = useDashboardSummary()
+  const { data: profile } = useProfile()
+  const { mutateAsync: updateProfile } = useUpdateProfile()
+  const queryClient = useQueryClient()
 
   const defaultGoal: CareerGoal = {
     position: "Не указана",
@@ -53,6 +58,7 @@ export function DashboardContent() {
   const [careerGoal, setCareerGoal] = useState<CareerGoal>(defaultGoal)
   const [goalModalOpen, setGoalModalOpen] = useState(false)
   const [tempGoal, setTempGoal] = useState<CareerGoal>(defaultGoal)
+  const [isSavingGoal, setIsSavingGoal] = useState(false)
 
   // Sync career goal from backend data
   useEffect(() => {
@@ -61,9 +67,24 @@ export function DashboardContent() {
     }
   }, [dashboard])
 
-  const saveGoal = () => {
-    setCareerGoal(tempGoal)
-    setGoalModalOpen(false)
+  const saveGoal = async () => {
+    setIsSavingGoal(true)
+    try {
+      const salaryNum = parseInt(tempGoal.salary.replace(/\D/g, "")) || undefined
+      const expNum = parseInt(tempGoal.experience) || undefined
+      await updateProfile({
+        ...profile,
+        desiredPosition: tempGoal.position !== "Не указана" ? tempGoal.position : profile?.desiredPosition,
+        location: tempGoal.location !== "Не указана" ? tempGoal.location : profile?.location,
+        desiredSalaryMin: salaryNum ?? profile?.desiredSalaryMin,
+        experienceYears: expNum ?? profile?.experienceYears,
+      })
+      setCareerGoal(tempGoal)
+      await queryClient.invalidateQueries({ queryKey: analyticsKeys.dashboard() })
+    } finally {
+      setIsSavingGoal(false)
+      setGoalModalOpen(false)
+    }
   }
 
   const openGoalModal = () => {
@@ -293,8 +314,8 @@ export function DashboardContent() {
             <Button variant="outline" onClick={() => setGoalModalOpen(false)} className="bg-transparent border-border">
               Отмена
             </Button>
-            <Button onClick={saveGoal} className="bg-blue-600 hover:bg-blue-700">
-              Сохранить
+            <Button onClick={saveGoal} className="bg-blue-600 hover:bg-blue-700" disabled={isSavingGoal}>
+              {isSavingGoal ? "Сохраняем..." : "Сохранить"}
             </Button>
           </DialogFooter>
         </DialogContent>

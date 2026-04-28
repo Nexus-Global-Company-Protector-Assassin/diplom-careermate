@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { AiService } from '../ai/ai.service';
+import { QuotaService } from '../quota/quota.service';
 import { SubmitAssessmentDto } from './dto/submit-assessment.dto';
 
 const CAREER_CACHE_TTL = 7 * 24 * 60 * 60; // 7 days
@@ -15,9 +16,13 @@ export class CareerAssessmentService {
         private readonly prisma: PrismaService,
         private readonly redis: RedisService,
         private readonly aiService: AiService,
+        private readonly quota: QuotaService,
     ) {}
 
     async submitAssessment(userId: string, dto: SubmitAssessmentDto): Promise<any> {
+        await this.quota.assertQuizLimit(userId);
+        await this.quota.assertAiCall(userId);
+
         const profile = await this.prisma.profile.findFirst({ where: { userId } });
         if (!profile) {
             throw new NotFoundException('Профиль не найден. Создайте профиль перед прохождением теста.');
@@ -56,6 +61,7 @@ export class CareerAssessmentService {
             },
         });
 
+        void this.quota.commitAiCall(userId);
         return result;
     }
 

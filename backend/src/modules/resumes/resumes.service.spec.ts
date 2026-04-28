@@ -3,6 +3,8 @@ import { NotFoundException } from '@nestjs/common';
 import { ResumesService } from './resumes.service';
 import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { AiService } from '../ai/ai.service';
+import { QuotaService } from '../quota/quota.service';
 
 const USER_ID = 'user-uuid-1';
 const PROFILE_ID = 'profile-uuid-1';
@@ -45,6 +47,7 @@ describe('ResumesService', () => {
                 findFirst: jest.fn().mockResolvedValue(mockResume),
                 create: jest.fn().mockResolvedValue(mockResume),
                 deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+                count: jest.fn().mockResolvedValue(0),
             },
             vacancyResponse: { findMany: jest.fn().mockResolvedValue([mockVacancyResponse]) },
         };
@@ -59,6 +62,8 @@ describe('ResumesService', () => {
                 ResumesService,
                 { provide: PrismaService, useValue: mockPrisma },
                 { provide: StorageService, useValue: mockStorage },
+                { provide: AiService, useValue: { generateCoverLetter: jest.fn().mockResolvedValue({ coverLetter: 'mock cover letter' }) } },
+                { provide: QuotaService, useValue: { assertAiCall: jest.fn().mockResolvedValue(undefined), commitAiCall: jest.fn().mockResolvedValue(undefined), assertResumeLimit: jest.fn().mockResolvedValue(undefined) } },
             ],
         }).compile();
 

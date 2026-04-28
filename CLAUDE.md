@@ -297,7 +297,14 @@ ML_SHADOW_MODE=true                     # false = использовать ML sc
 - Включить ML-ранжирование: поставить `ML_SHADOW_MODE=false` + `ML_SERVICE_URL=http://ml-service:3003`
 - Обучение: `python -m src.training.trainer --min-samples 500` (нужно ~500 взаимодействий)
 
+### MVP Cleanup (2026-04-28) ✅
+- **Избранные вакансии** — `FavoriteVacancy` модель в Prisma (миграция `20260428000001_add_favorite_vacancy`), `GET/POST /vacancies/favorites` с реальным toggle, оптимистичные обновления на фронте через React Query
+- **Responses/Applications** — полностью вырезаны: эндпоинты убраны из контроллера, UI (кнопка "Откликнуться", applyModal, таблица откликов) убраны, аналитика переключена на favorites
+- **Career Goal** — `saveGoal()` теперь сохраняет в БД через `PUT /profiles/me` (поля `desiredPosition`, `location`, `desiredSalaryMin`, `experienceYears`), loading state на кнопке
+- **Analytics** — achievement "Активный соискатель" → "Исследователь" (10 избранных), weekly report теперь считает favorites вместо responses, career progress "Отклики идут" → "Вакансии сохранены"
+
 ### Планируется 📌
+- **Password reset** — отложено, нет email-сервиса
 - **Phase 2 training** — после накопления 500+ взаимодействий запустить первое обучение LightGBM
 - **RecommendationImpression логирование** ✅ уже есть — данные накапливаются
 - Исправить pre-existing TypeScript ошибки (fileKey, publishedAt в Prisma)

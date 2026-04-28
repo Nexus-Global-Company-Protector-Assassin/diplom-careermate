@@ -67,7 +67,7 @@ export const vacancyKeys = {
   all: ["vacancies"] as const,
   recommended: (position?: string, skills?: string) =>
     [...vacancyKeys.all, "recommended", position, skills] as const,
-  responses: () => [...vacancyKeys.all, "responses"] as const,
+  favorites: () => [...vacancyKeys.all, "favorites"] as const,
   search: (filters: VacancySearchFilters) =>
     [...vacancyKeys.all, "search", filters] as const,
 };
@@ -92,28 +92,34 @@ export const useRecommendedVacancies = (position?: string, skills?: string[], sa
   });
 };
 
-export const useResponses = () => {
+export const useFavorites = () => {
   return useQuery({
-    queryKey: vacancyKeys.responses(),
-    queryFn: () => api.get<any[]>("/vacancies/responses"),
-  });
-};
-
-export const useApplyToVacancy = () => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { vacancyId: string; coverLetter?: string }) =>
-      api.post<any>("/vacancies/responses", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: vacancyKeys.responses() });
-    },
+    queryKey: vacancyKeys.favorites(),
+    queryFn: () => api.get<string[]>("/vacancies/favorites"),
+    staleTime: 2 * 60 * 1000,
   });
 };
 
 export const useToggleFavorite = () => {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { vacancyId: string; isFavorite: boolean }) =>
-      api.post<any>("/vacancies/favorites", data),
+    mutationFn: (vacancyId: string) =>
+      api.post<{ isFavorite: boolean }>("/vacancies/favorites", { vacancyId }),
+    onMutate: async (vacancyId) => {
+      await queryClient.cancelQueries({ queryKey: vacancyKeys.favorites() });
+      const prev = queryClient.getQueryData<string[]>(vacancyKeys.favorites()) ?? [];
+      const next = prev.includes(vacancyId)
+        ? prev.filter(id => id !== vacancyId)
+        : [...prev, vacancyId];
+      queryClient.setQueryData(vacancyKeys.favorites(), next);
+      return { prev };
+    },
+    onError: (_err, _vacancyId, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(vacancyKeys.favorites(), ctx.prev);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: vacancyKeys.favorites() });
+    },
   });
 };
 

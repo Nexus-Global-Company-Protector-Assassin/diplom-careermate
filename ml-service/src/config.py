@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     models_dir: Path = Path("/app/models")
     shadow_mode: bool = True  # when True: predict but don't expose to ranking
 
+    # Neo4j Knowledge Graph (Phase 3 graph features)
+    neo4j_uri: str = ""
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = ""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

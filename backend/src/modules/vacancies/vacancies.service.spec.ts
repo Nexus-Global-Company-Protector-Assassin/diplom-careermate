@@ -12,6 +12,13 @@ import { QuestionGenService } from '../interviews/question-gen/question-gen.serv
 import { UserPreferencesService } from './user-preferences.service';
 import { RedisService } from '../redis/redis.service';
 import { MlRankingService } from '../ml/ml-ranking.service';
+import { QuotaService } from '../quota/quota.service';
+
+const makeQuotaService = () => ({
+    assertAiCall: jest.fn().mockResolvedValue(undefined),
+    commitAiCall: jest.fn().mockResolvedValue(undefined),
+    assertResumeLimit: jest.fn().mockResolvedValue(undefined),
+});
 
 // ──────────────────────────────── mock data ──────────────────────────────────
 const mockVacancy = {
@@ -88,6 +95,7 @@ const makeAiService = () => ({
 const makeSkillsService = () => ({
     extractFromText: jest.fn().mockResolvedValue([]),
     syncVacancySkills: jest.fn().mockResolvedValue(undefined),
+    getExpandedSkillNames: jest.fn().mockResolvedValue([]),
 });
 
 const makeEmbeddingsService = () => ({
@@ -157,6 +165,7 @@ describe('VacanciesService', () => {
                 { provide: UserPreferencesService, useValue: makeUserPreferences() },
                 { provide: RedisService, useValue: makeRedis() },
                 { provide: MlRankingService, useValue: makeMlRanking() },
+                { provide: QuotaService, useValue: makeQuotaService() },
             ],
         }).compile();
 
@@ -319,6 +328,7 @@ describe('VacanciesService', () => {
                     { provide: UserPreferencesService, useValue: makeUserPreferences() },
                     { provide: RedisService, useValue: makeRedis() },
                     { provide: MlRankingService, useValue: makeMlRanking() },
+                    { provide: QuotaService, useValue: makeQuotaService() },
                 ],
             }).compile();
 

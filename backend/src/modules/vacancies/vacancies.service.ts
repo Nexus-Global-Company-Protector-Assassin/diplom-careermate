@@ -10,6 +10,7 @@ import { QuestionGenService } from '../interviews/question-gen/question-gen.serv
 import { UserPreferencesService } from './user-preferences.service';
 import { MlRankingService } from '../ml/ml-ranking.service';
 import { detectArchetype, calcVacancyFreshness, RoleArchetype } from './vacancies.utils';
+import { QuotaService } from '../quota/quota.service';
 
 export { detectArchetype, calcVacancyFreshness };
 export type { RoleArchetype };
@@ -82,7 +83,8 @@ function calcMatch(
     vLabel: string | null | undefined,
     dPos: string,
     pSkills: string[],
-    pSalary: number | null | undefined
+    pSalary: number | null | undefined,
+    pExpandedSkills?: string[],  // graph-adjacent skills for soft matching
 ): MatchResult {
     const W_ROLE = 0.25; const W_SKILLS = 0.30; const W_SENIORITY = 0.15;
     const W_SALARY = 0.15; const W_DESC = 0.05; const W_ARCHETYPE = 0.10;
@@ -115,9 +117,15 @@ function calcMatch(
         seniorityScore = vSen === dSen ? 100 : Math.abs(vSen - dSen) === 1 ? 55 : 15;
     } else seniorityScore = (vSen === 0 && dSen === 0) ? 70 : 50;
 
-    // 3. Skills via Gap Analysis
-    const gap = analyzeSkillGap(vSkills, descLower, pSkills);
-    const skillScore = gap.score;
+    // 3. Skills via Gap Analysis (exact match + graph-expanded soft match)
+    const exactGap = analyzeSkillGap(vSkills, descLower, pSkills);
+    const softGap = pExpandedSkills?.length
+        ? analyzeSkillGap(vSkills, descLower, [...pSkills, ...pExpandedSkills])
+        : null;
+    // Blend: 70% exact Jaccard + 30% soft (graph-adjacent) when KG data available
+    const skillScore = softGap
+        ? Math.round(exactGap.score * 0.7 + softGap.score * 0.3)
+        : exactGap.score;
 
     // 4. Salary Score
     const getRate = (cur: string) => {
@@ -238,6 +246,7 @@ export class VacanciesService {
         private readonly questionGenService: QuestionGenService,
         private readonly userPreferences: UserPreferencesService,
         private readonly mlRanking: MlRankingService,
+        private readonly quota: QuotaService,
     ) { }
 
     /**
@@ -358,6 +367,12 @@ export class VacanciesService {
         }
         // ─────────────────────────────────────────────────────────────────────
 
+        // Graph-expanded skills: traverse CO_OCCURS_WITH from profile skills
+        // to find adjacent skills for soft matching (fire-and-forget safe — empty array on failure)
+        const expandedSkills = await this.skillsService
+            .getExpandedSkillNames(profileSkills, 20)
+            .catch(() => [] as string[]);
+
         // Calculate match, archetype, gap, freshness, and combined score for each
         const ranked = dbVacancies
             .map((v: any) => {
@@ -367,7 +382,8 @@ export class VacanciesService {
                 const matchResult = calcMatch(
                     v.title, skills, desc,
                     v.salaryFrom, v.salaryTo, v.salaryCurrency, v.salaryLabel,
-                    position, profileSkills, salary
+                    position, profileSkills, salary,
+                    expandedSkills,
                 );
                 const matchScore = matchResult.score;
                 const matchReasons = matchResult.reasons;
@@ -473,6 +489,41 @@ export class VacanciesService {
      * Record a behavioral interaction signal (click/apply/favorite/analyze/dismiss).
      * Uses upsert to avoid duplicate rows — re-interactions refresh the timestamp.
      */
+    async getFavorites(userId: string): Promise<string[]> {
+        const profile = await this.prisma.profile.findFirst({ where: { userId }, select: { id: true } });
+        if (!profile) return [];
+
+        const rows = await this.prisma.favoriteVacancy.findMany({
+            where: { profileId: profile.id },
+            select: { vacancyId: true },
+            orderBy: { createdAt: 'desc' },
+        });
+        return rows.map(r => r.vacancyId);
+    }
+
+    async toggleFavorite(vacancyId: string, userId: string): Promise<{ isFavorite: boolean }> {
+        const profile = await this.prisma.profile.findFirst({ where: { userId }, select: { id: true } });
+        if (!profile) return { isFavorite: false };
+
+        const existing = await this.prisma.favoriteVacancy.findUnique({
+            where: { profileId_vacancyId: { profileId: profile.id, vacancyId } },
+        });
+
+        if (existing) {
+            await this.prisma.favoriteVacancy.delete({
+                where: { profileId_vacancyId: { profileId: profile.id, vacancyId } },
+            });
+            return { isFavorite: false };
+        }
+
+        await this.prisma.favoriteVacancy.create({
+            data: { profileId: profile.id, vacancyId },
+        });
+
+        await this.recordInteraction(vacancyId, 'favorite', userId);
+        return { isFavorite: true };
+    }
+
     async recordInteraction(vacancyId: string, type: string, userId?: string): Promise<void> {
         const allowed = ['click', 'apply', 'favorite', 'analyze', 'dismiss'];
         if (!allowed.includes(type)) return;
@@ -677,11 +728,14 @@ export class VacanciesService {
             throw new Error(`Vacancy with ID ${id} not found`);
         }
 
+        if (userId) await this.quota.assertAiCall(userId);
+
         // Find the resume: use specific resumeId if provided, otherwise find the latest one
         let resume: any = null;
         if (resumeId && resumeId !== 'all') {
-            resume = await this.prisma.resume.findUnique({
-                where: { id: resumeId },
+            // Scope by owner to prevent IDOR — only return the resume if it belongs to the current user
+            resume = await this.prisma.resume.findFirst({
+                where: { id: resumeId, ...(userId ? { profile: { userId } } : {}) },
             });
         } else {
             // Fallback: find the latest resume for this user
@@ -715,13 +769,17 @@ export class VacanciesService {
         for (const vs of vSet) if (!pSet.has(vs)) missingSkills.push(vs);
 
         // Call the AI service with enriched context
-        return this.aiService.evaluateVacancyInDepth(vacancy, resume.content, archetype, missingSkills.slice(0, 8));
+        const result = await this.aiService.evaluateVacancyInDepth(vacancy, resume.content, archetype, missingSkills.slice(0, 8));
+        if (userId) void this.quota.commitAiCall(userId);
+        return result;
     }
 
     /**
      * Generate STAR+R interview preparation for a specific vacancy
      */
     async interviewPrep(id: string, resumeId?: string, userId?: string) {
+        if (userId) await this.quota.assertAiCall(userId);
+
         // Find the vacancy safely
         let vacancy: any = null;
         try {
@@ -737,7 +795,10 @@ export class VacanciesService {
         // Find the resume
         let resume: any = null;
         if (resumeId && resumeId !== 'all') {
-            resume = await this.prisma.resume.findUnique({ where: { id: resumeId } });
+            // Scope by owner to prevent IDOR
+            resume = await this.prisma.resume.findFirst({
+                where: { id: resumeId, ...(userId ? { profile: { userId } } : {}) },
+            });
         } else {
             resume = await this.prisma.resume.findFirst({
                 where: userId ? { profile: { userId } } : undefined,
@@ -749,13 +810,17 @@ export class VacanciesService {
             return { noResume: true };
         }
 
-        return this.questionGenService.generateForVacancy(vacancy, resume.content);
+        const prep = await this.questionGenService.generateForVacancy(vacancy, resume.content);
+        if (userId) void this.quota.commitAiCall(userId);
+        return prep;
     }
 
     /**
      * Generate AI cover letter for a vacancy based on user's resume
      */
     async generateCoverLetter(id: string, resumeId?: string, language: 'ru' | 'en' = 'ru', userId?: string): Promise<{ coverLetter: string } | { noResume: true }> {
+        if (userId) await this.quota.assertAiCall(userId);
+
         // Find the vacancy safely
         let vacancy: any = null;
         try {
@@ -771,7 +836,10 @@ export class VacanciesService {
         // Find the resume
         let resume: any = null;
         if (resumeId && resumeId !== 'all') {
-            resume = await this.prisma.resume.findUnique({ where: { id: resumeId } });
+            // Scope by owner to prevent IDOR
+            resume = await this.prisma.resume.findFirst({
+                where: { id: resumeId, ...(userId ? { profile: { userId } } : {}) },
+            });
         } else {
             resume = await this.prisma.resume.findFirst({
                 where: userId ? { profile: { userId } } : undefined,
@@ -783,6 +851,8 @@ export class VacanciesService {
             return { noResume: true };
         }
 
-        return this.aiService.generateCoverLetter(vacancy, resume.content, language);
+        const letter = await this.aiService.generateCoverLetter(vacancy, resume.content, language);
+        if (userId) void this.quota.commitAiCall(userId);
+        return letter;
     }
 }

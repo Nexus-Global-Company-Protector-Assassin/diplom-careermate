@@ -36,7 +36,9 @@ SELECT
     v.location,
     v.published_at,
     v.created_at                AS vacancy_created_at,
-    COALESCE(json_array_length(v.skills::json), 0) AS skill_count
+    COALESCE(json_array_length(v.skills::json), 0) AS skill_count,
+    ARRAY(SELECT ps."skillId" FROM "ProfileSkill" ps WHERE ps."profileId" = vi.profile_id) AS profile_skill_ids,
+    ARRAY(SELECT vs."skillId" FROM "VacancySkill"  vs WHERE vs."vacancyId" = vi.vacancy_id) AS vacancy_skill_ids
 FROM "VacancyInteraction" vi
 JOIN "Vacancy" v ON v.id = vi.vacancy_id
 WHERE vi.type IN ('analyze', 'apply', 'favorite')
@@ -57,7 +59,9 @@ SELECT
     v.location,
     v.published_at,
     v.created_at                AS vacancy_created_at,
-    COALESCE(json_array_length(v.skills::json), 0) AS skill_count
+    COALESCE(json_array_length(v.skills::json), 0) AS skill_count,
+    ARRAY(SELECT ps."skillId" FROM "ProfileSkill" ps WHERE ps."profileId" = ri.profile_id) AS profile_skill_ids,
+    ARRAY(SELECT vs."skillId" FROM "VacancySkill"  vs WHERE vs."vacancyId" = ri.vacancy_id) AS vacancy_skill_ids
 FROM "RecommendationImpression" ri
 JOIN "Vacancy" v ON v.id = ri.vacancy_id
 LEFT JOIN "VacancyInteraction" vi

@@ -30,7 +30,7 @@ except ImportError:
     _HAS_LGB = False
 
 from ..config import settings
-from ..features import user_features, vacancy_features, cross_features
+from ..features import user_features, vacancy_features, cross_features, graph_features
 from .dataset_builder import build as build_dataset
 
 logger = logging.getLogger(__name__)
@@ -38,8 +38,13 @@ logger = logging.getLogger(__name__)
 MIN_SAMPLES_DEFAULT = 500
 
 
-def _build_feature_matrix(df: pd.DataFrame) -> np.ndarray:
-    """Build feature matrix from a raw dataset DataFrame."""
+def _build_feature_matrix(df: pd.DataFrame, graph_extractor: graph_features.GraphFeaturesExtractor | None = None) -> np.ndarray:
+    """Build feature matrix from a raw dataset DataFrame.
+
+    Feature vector layout:
+      [user features] + [vacancy features] + [cross features] + [graph features (Phase 3)]
+    Graph features are zeros when Neo4j is unavailable (graceful degradation).
+    """
     rows = []
     for _, row in df.iterrows():
         profile_feats: dict = json.loads(row.get("profile_features", "{}") or "{}")
@@ -59,7 +64,16 @@ def _build_feature_matrix(df: pd.DataFrame) -> np.ndarray:
             days_old=int(row.get("days_old", 0)),
         )
         c = cross_features.compute(u, v)
-        feature_row = list(u.values()) + list(v.values()) + list(c.values())
+
+        # Phase 3: graph-based features (optional, zeros if Neo4j unavailable)
+        if graph_extractor is not None:
+            profile_ids = list(row.get("profile_skill_ids") or [])
+            vacancy_ids = list(row.get("vacancy_skill_ids") or [])
+            g = graph_extractor.extract(profile_ids, vacancy_ids)
+        else:
+            g = graph_features.GRAPH_ZERO.copy()
+
+        feature_row = list(u.values()) + list(v.values()) + list(c.values()) + list(g.values())
         rows.append(feature_row)
     return np.array(rows, dtype=np.float32)
 
@@ -81,7 +95,9 @@ def train(min_samples: int = MIN_SAMPLES_DEFAULT) -> str | None:
         return None
 
     logger.info(f"[Trainer] Building feature matrix for {len(df)} samples...")
-    X = _build_feature_matrix(df)
+    graph_extractor = graph_features.get_extractor()
+    X = _build_feature_matrix(df, graph_extractor)
+    graph_extractor.close()
     y = df["label"].values.astype(np.int32)
 
     # Group-aware split: same profile never in both train and test

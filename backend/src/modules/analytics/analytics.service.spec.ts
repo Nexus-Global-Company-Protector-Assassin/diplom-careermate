@@ -14,7 +14,7 @@ describe('AnalyticsService', () => {
                     useValue: {
                         vacancy: { count: jest.fn().mockResolvedValue(0) },
                         interview: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
-                        vacancyResponse: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+                        favoriteVacancy: { count: jest.fn().mockResolvedValue(0) },
                         resume: { count: jest.fn().mockResolvedValue(0) },
                         profile: { findFirst: jest.fn().mockResolvedValue(null) },
                     },

@@ -10,6 +10,7 @@ import { AIChat } from "@/features/chat/ai-chat"
 import { useSidebar } from "@/shared/context/sidebar-context"
 import { cn } from "@/shared/lib/utils"
 import { OnboardingModal } from "@/features/onboarding/onboarding-modal"
+import { UpgradeModal } from "@/features/quota/upgrade-modal"
 import { Button } from "@/shared/ui/button"
 import { AlertCircle, X } from "lucide-react"
 import { useProfile } from "@/features/profile/api/use-profile"
@@ -73,6 +74,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       </div>
       <AIChat />
       <OnboardingModal />
+      <UpgradeModal />
     </div>
   )
 }
