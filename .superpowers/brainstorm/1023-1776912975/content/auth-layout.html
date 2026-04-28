@@ -1,0 +1,95 @@
+<h2>Как должны выглядеть страницы авторизации?</h2>
+<p class="subtitle">Выбери вариант компоновки — он определит общий стиль страниц входа и регистрации</p>
+
+<div class="cards">
+
+  <!-- Option A: Centered card -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0f1117;min-height:220px;display:flex;align-items:center;justify-content:center;border-radius:8px;padding:16px;">
+        <div style="background:#1a1d27;border:1px solid #2a2d3a;border-radius:12px;padding:24px;width:240px;">
+          <div style="text-align:center;margin-bottom:16px;">
+            <div style="width:36px;height:36px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;margin:0 auto 8px;"></div>
+            <div style="height:12px;background:#3a3d4a;border-radius:4px;width:100px;margin:0 auto 4px;"></div>
+            <div style="height:8px;background:#2a2d3a;border-radius:4px;width:140px;margin:0 auto;"></div>
+          </div>
+          <div style="height:8px;background:#2a2d3a;border-radius:4px;width:60px;margin-bottom:6px;"></div>
+          <div style="height:32px;background:#232636;border:1px solid #3a3d4a;border-radius:6px;margin-bottom:10px;"></div>
+          <div style="height:8px;background:#2a2d3a;border-radius:4px;width:60px;margin-bottom:6px;"></div>
+          <div style="height:32px;background:#232636;border:1px solid #3a3d4a;border-radius:6px;margin-bottom:14px;"></div>
+          <div style="height:32px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:6px;"></div>
+          <div style="height:8px;background:#2a2d3a;border-radius:4px;width:140px;margin:10px auto 0;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Центрированная карточка</h3>
+      <p>Минималистично. Форма по центру на тёмном фоне. Акцент на функции, без отвлечений. Быстро реализуется.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Split layout -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0f1117;min-height:220px;display:flex;border-radius:8px;overflow:hidden;">
+        <!-- Left panel -->
+        <div style="width:50%;background:linear-gradient(135deg,#1e1b4b,#312e81,#4c1d95);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;">
+          <div style="width:40px;height:40px;background:rgba(255,255,255,0.15);border-radius:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;">
+            <div style="width:20px;height:20px;border:2px solid rgba(255,255,255,0.6);border-radius:4px;"></div>
+          </div>
+          <div style="height:10px;background:rgba(255,255,255,0.25);border-radius:4px;width:80px;margin-bottom:6px;"></div>
+          <div style="height:7px;background:rgba(255,255,255,0.12);border-radius:4px;width:110px;margin-bottom:4px;"></div>
+          <div style="height:7px;background:rgba(255,255,255,0.12);border-radius:4px;width:90px;"></div>
+          <div style="margin-top:16px;display:flex;gap:6px;">
+            <div style="width:6px;height:6px;background:rgba(255,255,255,0.6);border-radius:50%;"></div>
+            <div style="width:6px;height:6px;background:rgba(255,255,255,0.25);border-radius:50%;"></div>
+            <div style="width:6px;height:6px;background:rgba(255,255,255,0.25);border-radius:50%;"></div>
+          </div>
+        </div>
+        <!-- Right panel -->
+        <div style="width:50%;background:#1a1d27;display:flex;align-items:center;justify-content:center;padding:16px;">
+          <div style="width:100%;">
+            <div style="height:10px;background:#3a3d4a;border-radius:4px;width:80px;margin-bottom:12px;"></div>
+            <div style="height:7px;background:#2a2d3a;border-radius:4px;width:60px;margin-bottom:5px;"></div>
+            <div style="height:28px;background:#232636;border:1px solid #3a3d4a;border-radius:5px;margin-bottom:8px;"></div>
+            <div style="height:7px;background:#2a2d3a;border-radius:4px;width:60px;margin-bottom:5px;"></div>
+            <div style="height:28px;background:#232636;border:1px solid #3a3d4a;border-radius:5px;margin-bottom:10px;"></div>
+            <div style="height:28px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:5px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Split: бренд + форма</h3>
+      <p>Левая половина — фирменная панель с лого и слоганом. Правая — форма входа. Выглядит профессионально и солидно.</p>
+    </div>
+  </div>
+
+  <!-- Option C: Full-page gradient -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);min-height:220px;display:flex;align-items:center;justify-content:center;border-radius:8px;padding:16px;position:relative;overflow:hidden;">
+        <!-- Decorative blobs -->
+        <div style="position:absolute;top:-20px;right:-20px;width:100px;height:100px;background:rgba(99,102,241,0.2);border-radius:50%;filter:blur(20px);"></div>
+        <div style="position:absolute;bottom:-20px;left:-20px;width:80px;height:80px;background:rgba(139,92,246,0.2);border-radius:50%;filter:blur(16px);"></div>
+        <!-- Card -->
+        <div style="background:rgba(255,255,255,0.05);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:24px;width:220px;position:relative;">
+          <div style="text-align:center;margin-bottom:14px;">
+            <div style="width:32px;height:32px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;margin:0 auto 6px;box-shadow:0 0 20px rgba(99,102,241,0.4);"></div>
+            <div style="height:10px;background:rgba(255,255,255,0.3);border-radius:4px;width:90px;margin:0 auto;"></div>
+          </div>
+          <div style="height:7px;background:rgba(255,255,255,0.15);border-radius:4px;width:50px;margin-bottom:5px;"></div>
+          <div style="height:28px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:6px;margin-bottom:8px;"></div>
+          <div style="height:7px;background:rgba(255,255,255,0.15);border-radius:4px;width:50px;margin-bottom:5px;"></div>
+          <div style="height:28px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:6px;margin-bottom:12px;"></div>
+          <div style="height:28px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:6px;box-shadow:0 4px 15px rgba(99,102,241,0.35);"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Glassmorphism на градиенте</h3>
+      <p>Полноэкранный градиентный фон + стеклянная карточка с blur. Современно и эффектно. Хорошо смотрится с фирменными цветами проекта.</p>
+    </div>
+  </div>
+
+</div>

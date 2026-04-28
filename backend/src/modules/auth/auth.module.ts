@@ -15,7 +15,7 @@ import { AuthController } from './auth.controller';
         JwtModule.registerAsync({
             imports: [ConfigModule],
             useFactory: async (configService: ConfigService) => ({
-                secret: configService.get<string>('JWT_SECRET') || 'secretKey',
+                secret: configService.getOrThrow<string>('JWT_SECRET'),
                 signOptions: { expiresIn: '15m' },
             }),
             inject: [ConfigService],

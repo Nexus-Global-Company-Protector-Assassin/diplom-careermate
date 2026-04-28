@@ -1,102 +1,91 @@
-name: Deploy to Production
+name: Deploy
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip smoke tests (emergency deploy)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false  # Never cancel a running deploy
 
 env:
-  NODE_VERSION: '18'
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_PREFIX: ${{ github.repository }}
+  NODE_VERSION: '20'
 
 jobs:
-  # ==========================================
-  # Build and Push Docker Images
-  # ==========================================
-  build-and-push:
-    name: Build & Push Docker Images
+  # ------------------------------------------
+  # Build & Push — backend and agent in parallel
+  # Frontend goes to Vercel directly (no Docker needed)
+  # ------------------------------------------
+  build:
+    name: Build & Push → ${{ matrix.service }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+          - service: agent
+            context: ./agent
+            dockerfile: ./agent/Dockerfile
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (Frontend)
-        id: meta-frontend
-        uses: docker/metadata-action@v5
+      - uses: docker/metadata-action@v5
+        id: meta
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
           tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
 
-      - name: Build and push Frontend
-        uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./devops/docker/Dockerfile.frontend
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: true
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
-            NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
-            SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
-      - name: Extract metadata (Backend)
-        id: meta-backend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
-      - name: Build and push Backend
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./devops/docker/Dockerfile.backend
-          push: true
-          tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: ${{ steps.meta-backend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ==========================================
-  # Deploy to Vercel (Frontend)
-  # ==========================================
+  # ------------------------------------------
+  # Frontend — deploy to Vercel
+  # Runs in parallel with Docker builds
+  # ------------------------------------------
   deploy-frontend:
-    name: Deploy Frontend to Vercel
+    name: Deploy Frontend → Vercel
     runs-on: ubuntu-latest
-    needs: build-and-push
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
+      - uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
@@ -104,93 +93,149 @@ jobs:
           vercel-args: '--prod'
           working-directory: ./frontend
 
-  # ==========================================
-  # Deploy to Railway/Fly.io (Backend)
-  # ==========================================
-  deploy-backend:
-    name: Deploy Backend
+  # ------------------------------------------
+  # Migrations — runs AFTER new image is built,
+  # BEFORE new backend containers start
+  # ------------------------------------------
+  migrate:
+    name: Run DB Migrations
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: build
+    environment: production
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # Option 1: Railway
-      - name: Deploy to Railway
-        if: ${{ secrets.RAILWAY_TOKEN != '' }}
-        run: |
-          npm install -g @railway/cli
-          railway up --service backend
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
-      # Option 2: Fly.io
-      - name: Deploy to Fly.io
-        if: ${{ secrets.FLY_API_TOKEN != '' }}
-        uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Deploy to Fly
-        if: ${{ secrets.FLY_API_TOKEN != '' }}
-        run: flyctl deploy --remote-only --config ./backend/fly.toml
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-
-  # ==========================================
-  # Database Migration
-  # ==========================================
-  migrate-database:
-    name: Run Database Migrations
-    runs-on: ubuntu-latest
-    needs: deploy-backend
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install dependencies
-        run: npm ci --workspace=backend
+      - name: Cache backend deps
+        uses: actions/cache@v4
+        with:
+          path: backend/node_modules
+          key: backend-${{ hashFiles('backend/package-lock.json') }}
 
-      - name: Run migrations
+      - name: Install deps
+        run: npm ci
+        working-directory: ./backend
+
+      - name: Run Prisma migrations
         run: npx prisma migrate deploy
         working-directory: ./backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-  # ==========================================
-  # Smoke Tests
-  # ==========================================
+  # ------------------------------------------
+  # Deploy Backend + Agent to VPS via SSH
+  # Pulls pre-built images from GHCR, rolling restart
+  # ------------------------------------------
+  deploy-backend:
+    name: Deploy Backend & Agent → VPS
+    runs-on: ubuntu-latest
+    needs: [build, migrate]
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute short SHA
+        id: sha
+        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd /opt/careermate
+
+            # Authenticate with GHCR
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+            # Export new image references
+            export BACKEND_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:sha-${{ steps.sha.outputs.short }}"
+            export AGENT_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-agent:sha-${{ steps.sha.outputs.short }}"
+
+            echo "Pulling $BACKEND_IMAGE"
+            docker pull "$BACKEND_IMAGE"
+
+            echo "Pulling $AGENT_IMAGE"
+            docker pull "$AGENT_IMAGE"
+
+            # Rolling restart — docker compose replaces containers one by one
+            docker compose -f devops/docker/docker-compose.prod.yml \
+              up -d --no-build --remove-orphans \
+              backend agent
+
+            # Wait for backend to become healthy (up to 120s)
+            echo "Waiting for backend..."
+            timeout 120 bash -c \
+              'until curl -sf http://localhost:3001/api/v1/health > /dev/null; do sleep 3; done' \
+              || { echo "Backend health check timed out"; exit 1; }
+
+            # Wait for agent to become healthy (up to 60s)
+            echo "Waiting for agent..."
+            timeout 60 bash -c \
+              'until curl -sf http://localhost:3002/health > /dev/null; do sleep 3; done' \
+              || { echo "Agent health check timed out"; exit 1; }
+
+            # Clean up dangling images (project-scoped only)
+            docker image prune -f --filter "dangling=true"
+
+            echo "Deploy complete ✓"
+
+  # ------------------------------------------
+  # Smoke Tests — verify production is alive
+  # ------------------------------------------
   smoke-test:
     name: Smoke Tests
     runs-on: ubuntu-latest
-    needs: [deploy-frontend, deploy-backend, migrate-database]
+    needs: [deploy-frontend, deploy-backend]
+    if: ${{ !inputs.skip_tests }}
 
     steps:
-      - name: Check Frontend Health
-        run: |
-          curl -f ${{ secrets.PRODUCTION_FRONTEND_URL }} || exit 1
-
       - name: Check Backend Health
         run: |
-          curl -f ${{ secrets.PRODUCTION_API_URL }}/api/v1/health || exit 1
+          for i in $(seq 1 6); do
+            echo "Attempt $i..."
+            if curl -sf --max-time 10 "${{ secrets.PRODUCTION_API_URL }}/api/v1/health"; then
+              echo "Backend is healthy ✓"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Backend smoke test failed after retries"
+          exit 1
 
-      - name: Notify Success
+      - name: Check Frontend
+        run: |
+          curl -sf --max-time 15 "${{ secrets.PRODUCTION_FRONTEND_URL }}" \
+            || { echo "Frontend smoke test failed"; exit 1; }
+          echo "Frontend is healthy ✓"
+
+      - name: Notify success
         if: success()
         uses: 8398a7/action-slack@v3
         with:
-          status: ${{ job.status }}
-          text: '✅ Deployment to production successful!'
+          status: success
+          text: |
+            ✅ *Production deploy successful*
+            Commit: `${{ github.sha }}`
+            Author: ${{ github.actor }}
           webhook_url: ${{ secrets.SLACK_WEBHOOK }}
 
-      - name: Notify Failure
+      - name: Notify failure
         if: failure()
         uses: 8398a7/action-slack@v3
         with:
-          status: ${{ job.status }}
-          text: '❌ Deployment to production failed!'
+          status: failure
+          text: |
+            ❌ *Production smoke test FAILED*
+            Commit: `${{ github.sha }}`
+            Author: ${{ github.actor }}
+            Action: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           webhook_url: ${{ secrets.SLACK_WEBHOOK }}

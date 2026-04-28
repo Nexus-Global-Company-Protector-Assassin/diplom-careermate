@@ -1,153 +1,92 @@
 #!/bin/bash
+# Manual VPS deploy script — use when deploying outside of GitHub Actions CI/CD.
+# For automated deploys, push to main and let GitHub Actions handle it.
 
-# ==========================================
-# CareerMate Deployment Script
-# ==========================================
+set -euo pipefail
 
-set -e
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
+log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+log_warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Functions
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Configuration
 ENVIRONMENT=${1:-staging}
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+COMPOSE_FILE="${PROJECT_ROOT}/devops/docker/docker-compose.prod.yml"
 
-log_info "Deploying CareerMate to ${ENVIRONMENT}..."
-log_info "Project root: ${PROJECT_ROOT}"
-
-# Check environment
+# Validate environment
 if [[ ! "$ENVIRONMENT" =~ ^(staging|production)$ ]]; then
-    log_error "Invalid environment. Use 'staging' or 'production'"
+    log_error "Usage: $0 [staging|production]"
     exit 1
 fi
 
-# Load environment variables
-if [ -f "${PROJECT_ROOT}/.env.${ENVIRONMENT}" ]; then
-    log_info "Loading environment variables from .env.${ENVIRONMENT}"
-    export $(cat "${PROJECT_ROOT}/.env.${ENVIRONMENT}" | grep -v '^#' | xargs)
-else
-    log_warning ".env.${ENVIRONMENT} not found, using default .env"
-    export $(cat "${PROJECT_ROOT}/.env" | grep -v '^#' | xargs)
-fi
+log_info "Deploying CareerMate → ${ENVIRONMENT}"
 
-# Pre-deployment checks
-log_info "Running pre-deployment checks..."
-
-# Check Docker
-if ! command -v docker &> /dev/null; then
-    log_error "Docker is not installed"
+# Load env vars safely (no eval, handles spaces and special chars)
+ENV_FILE="${PROJECT_ROOT}/.env.${ENVIRONMENT}"
+[[ -f "$ENV_FILE" ]] || ENV_FILE="${PROJECT_ROOT}/.env"
+if [[ ! -f "$ENV_FILE" ]]; then
+    log_error "No env file found at $ENV_FILE"
     exit 1
 fi
+set -a; source "$ENV_FILE"; set +a
+log_success "Loaded env from $ENV_FILE"
 
-# Check Docker Compose
-if ! command -v docker-compose &> /dev/null; then
-    log_error "Docker Compose is not installed"
-    exit 1
-fi
+# Preflight checks
+command -v docker &>/dev/null || { log_error "Docker not installed"; exit 1; }
+docker compose version &>/dev/null || { log_error "Docker Compose plugin not installed"; exit 1; }
+log_success "Preflight checks passed"
 
-log_success "Pre-deployment checks passed"
-
-# Build images
-log_info "Building Docker images..."
-cd "${PROJECT_ROOT}"
-
-docker-compose -f devops/docker/docker-compose.prod.yml build --no-cache
-
-log_success "Docker images built successfully"
-
-# Database backup (production only)
-if [ "$ENVIRONMENT" = "production" ]; then
-    log_info "Creating database backup..."
-
+# Backup DB before production deploy
+if [[ "$ENVIRONMENT" == "production" ]]; then
     BACKUP_DIR="${PROJECT_ROOT}/backups"
     mkdir -p "$BACKUP_DIR"
-
-    BACKUP_FILE="${BACKUP_DIR}/db_backup_$(date +%Y%m%d_%H%M%S).sql"
-
-    docker-compose -f devops/docker/docker-compose.prod.yml exec -T postgres \
-        pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" > "$BACKUP_FILE"
-
-    log_success "Database backup created: $BACKUP_FILE"
+    BACKUP_FILE="${BACKUP_DIR}/db_backup_$(date +%Y%m%d_%H%M%S).sql.gz"
+    log_info "Backing up database → $BACKUP_FILE"
+    docker compose -f "$COMPOSE_FILE" exec -T postgres \
+        pg_dump -U "${POSTGRES_USER}" "${POSTGRES_DB}" | gzip > "$BACKUP_FILE"
+    log_success "Backup saved: $BACKUP_FILE"
 fi
 
-# Stop old containers
-log_info "Stopping old containers..."
-docker-compose -f devops/docker/docker-compose.prod.yml down
+# Pull latest images from GHCR
+log_info "Pulling latest images from registry..."
+docker compose -f "$COMPOSE_FILE" pull --ignore-pull-failures backend agent
+log_success "Images pulled"
 
-# Start new containers
-log_info "Starting new containers..."
-docker-compose -f devops/docker/docker-compose.prod.yml up -d
+# Run migrations before starting new containers
+log_info "Running DB migrations..."
+docker compose -f "$COMPOSE_FILE" run --rm migrate
+log_success "Migrations complete"
 
-# Wait for services to be healthy
-log_info "Waiting for services to be healthy..."
-sleep 10
+# Rolling restart of app services (keeps nginx + DB running)
+log_info "Restarting backend and agent..."
+docker compose -f "$COMPOSE_FILE" up -d --no-build --remove-orphans backend agent
 
-# Health checks
-log_info "Running health checks..."
+# Health check with polling (no sleep guessing)
+wait_healthy() {
+    local name=$1 url=$2 timeout=${3:-60}
+    log_info "Waiting for $name to be healthy ($timeout s max)..."
+    local deadline=$(( $(date +%s) + timeout ))
+    until curl -sf --max-time 5 "$url" &>/dev/null; do
+        if (( $(date +%s) > deadline )); then
+            log_error "$name health check timed out"
+            docker compose -f "$COMPOSE_FILE" logs --tail=50 "$name"
+            return 1
+        fi
+        sleep 3
+    done
+    log_success "$name is healthy"
+}
 
-# Check backend
-BACKEND_URL="${API_URL:-http://localhost:3001}"
-if curl -f "${BACKEND_URL}/api/v1/health" &> /dev/null; then
-    log_success "Backend is healthy"
-else
-    log_error "Backend health check failed"
-    exit 1
-fi
+wait_healthy "backend" "http://localhost:3001/api/v1/health" 90
+wait_healthy "agent"   "http://localhost:3002/health"         60
 
-# Check frontend
-FRONTEND_URL="${NEXTAUTH_URL:-http://localhost:3000}"
-if curl -f "${FRONTEND_URL}" &> /dev/null; then
-    log_success "Frontend is healthy"
-else
-    log_error "Frontend health check failed"
-    exit 1
-fi
+# Cleanup old/dangling images (scoped — won't nuke other projects)
+log_info "Cleaning up dangling images..."
+docker image prune -f --filter "dangling=true"
 
-# Run database migrations
-log_info "Running database migrations..."
-docker-compose -f devops/docker/docker-compose.prod.yml exec -T backend \
-    npx prisma migrate deploy
-
-log_success "Database migrations completed"
-
-# Clean up old images
-log_info "Cleaning up old Docker images..."
-docker system prune -f
-
-log_success "Deployment completed successfully!"
-
-# Show running containers
-log_info "Running containers:"
-docker-compose -f devops/docker/docker-compose.prod.yml ps
-
+log_success "Deployment to ${ENVIRONMENT} complete!"
 echo ""
-log_success "CareerMate ${ENVIRONMENT} is now running!"
-echo ""
-echo "Services:"
-echo "  Frontend: ${FRONTEND_URL}"
-echo "  Backend:  ${BACKEND_URL}"
-echo "  API Docs: ${BACKEND_URL}/api/docs"
-echo ""
+echo "  Backend: http://localhost:3001/api/docs"
+echo "  Agent:   http://localhost:3002"

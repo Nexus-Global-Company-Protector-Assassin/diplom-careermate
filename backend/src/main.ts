@@ -7,9 +7,24 @@ import * as helmet from 'helmet';
 import * as compression from 'compression';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
+import { WinstonModule } from 'nest-winston';
+import * as winston from 'winston';
 
 async function bootstrap() {
-    const app = await NestFactory.create(AppModule);
+    const winstonLogger = WinstonModule.createLogger({
+        transports: [
+            new winston.transports.Console({
+                format: winston.format.combine(
+                    winston.format.timestamp(),
+                    winston.format.json(),
+                ),
+            }),
+        ],
+    });
+
+    const app = await NestFactory.create(AppModule, {
+        logger: winstonLogger,
+    });
     const configService = app.get(ConfigService);
     const logger = new Logger('Bootstrap');
 
@@ -21,7 +36,7 @@ async function bootstrap() {
 
     // Enable CORS
     app.enableCors({
-        origin: configService.get('CORS_ORIGIN') || '*',
+        origin: configService.get('CORS_ORIGIN') || configService.get('FRONTEND_URL') || 'http://localhost:3000',
         credentials: true,
     });
 

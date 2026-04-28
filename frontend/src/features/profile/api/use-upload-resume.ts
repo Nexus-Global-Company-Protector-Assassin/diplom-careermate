@@ -20,8 +20,8 @@ export const useUploadResume = () => {
             }
 
             // Calls the ML Agent directly via backend proxy or directly
-            // Backend does NOT yet proxy file uploads, so we talk to Agent directly on :3003
-            const agentUrl = process.env.NEXT_PUBLIC_AGENT_URL || 'http://localhost:3003';
+            // Backend does NOT yet proxy file uploads, so we talk to Agent directly on :3002
+            const agentUrl = process.env.NEXT_PUBLIC_AGENT_URL || 'http://localhost:3002';
             const response = await fetch(`${agentUrl}/ai/upload-resume`, {
                 method: 'POST',
                 headers,

@@ -6,6 +6,7 @@ import { Button } from "@/shared/ui/button"
 import { Input } from "@/shared/ui/input"
 import { cn } from "@/shared/lib/utils"
 import { BebsichLogo } from "@/shared/assets/bebsich-logo"
+import { useChatResponse } from "./api/use-chat"
 
 interface Message {
   id: string
@@ -32,6 +33,7 @@ export function AIChat() {
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const { mutateAsync: getChatResponse } = useChatResponse()
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -40,28 +42,6 @@ export function AIChat() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
-
-  const generateResponse = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase()
-
-    if (lowerMessage.includes("резюме")) {
-      return "Для улучшения резюме рекомендую:\n\n1. Добавьте конкретные достижения с цифрами\n2. Используйте ключевые слова из вакансий\n3. Проверьте грамматику и оформление\n4. Добавьте релевантные навыки\n\nХотите, чтобы я проанализировал ваше текущее резюме?"
-    }
-
-    if (lowerMessage.includes("собеседован")) {
-      return "Подготовка к собеседованию включает:\n\n1. Изучите компанию и продукт\n2. Подготовьте рассказ о себе (1-2 минуты)\n3. Практикуйте ответы на типичные вопросы\n4. Подготовьте вопросы для работодателя\n\nМогу помочь с практикой ответов на вопросы!"
-    }
-
-    if (lowerMessage.includes("вакансии") || lowerMessage.includes("работ")) {
-      return "Я вижу, что вы ищете работу! На основе вашего профиля могу порекомендовать:\n\n• Senior Data Analyst в Yandex (93% совместимость)\n• Data Analyst в Sber (81% совместимость)\n\nПерейдите в раздел Вакансии для просмотра всех предложений."
-    }
-
-    if (lowerMessage.includes("привет") || lowerMessage.includes("здравствуй")) {
-      return "Привет! Рад видеть вас снова. Чем могу помочь сегодня? Могу помочь с:\n\n• Анализом и улучшением резюме\n• Подготовкой к собеседованию\n• Поиском подходящих вакансий\n• Карьерными советами"
-    }
-
-    return "Интересный вопрос! Я могу помочь вам с:\n\n• Анализом и улучшением резюме\n• Подготовкой к собеседованию\n• Поиском вакансий по вашему профилю\n• Карьерными рекомендациями\n\nЧто именно вас интересует?"
-  }
 
   const handleSend = async () => {
     if (!input.trim()) return
@@ -77,18 +57,26 @@ export function AIChat() {
     setInput("")
     setIsTyping(true)
 
-    // Simulate AI response delay
-    setTimeout(() => {
-      const response = generateResponse(input)
+    try {
+      const res = await getChatResponse(input)
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: response,
+        content: res.response || "Произошла ошибка при обращении к AI.",
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, assistantMessage])
+    } catch (e) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Извините, сервис временно недоступен.",
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
       setIsTyping(false)
-    }, 1000)
+    }
   }
 
   const handleQuickReply = (reply: string) => {

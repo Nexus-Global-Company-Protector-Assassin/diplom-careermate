@@ -1,5 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Last migration trigger: 2026-04-18
 
 generator client {
   provider = "prisma-client-js"
@@ -41,16 +42,25 @@ model Profile {
   workExperience      Json?
   skills              Json?
   languages           Json?
-  aboutMe             String?
-  careerGoals         String?
+  aboutMe                   String?
+  careerGoals               String?
+  workFormatPreference      String?   // "remote" | "hybrid" | "onsite"
+  companyTypePreference     String?   // "startup" | "scaleup" | "enterprise" | "agency" | "product"
+  managementStylePreference String?   // "flat" | "structured" | "autonomous" | "mentorship"
   linkedinUrl         String?
   githubUrl           String?
   portfolioUrl        String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  analysisResults     AnalysisResult[]
-  resumes             Resume[]
+  analysisResults       AnalysisResult[]
+  resumes               Resume[]
+  interviews            Interview[]
+  vacancyResponses      VacancyResponse[]
+  profileSkills         ProfileSkill[]
+  vacancyInteractions   VacancyInteraction[]
+  careerAssessments     CareerAssessment[]
+  favoriteVacancies     FavoriteVacancy[]
 }
 
 model AnalysisResult {
@@ -65,14 +75,49 @@ model Resume {
   id        String   @id @default(uuid())
   profileId String
   profile   Profile  @relation(fields: [profileId], references: [id])
+  title     String   @default("Мое резюме")
+  subtitle  String?
   content   String   // Markdown or HTML content
+  status    String   @default("draft") // draft, active, archived
+  type      String   @default("resume") // resume, cover_letter, ai_improved
   version   Int      @default(1)
+  reviewData Json?   // Full AI review result (score, strengths, weaknesses, improved resume)
+  fileKey    String?  // S3/MinIO object key for the original uploaded file
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Interview {
+  id        String   @id @default(uuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id])
+  company   String
+  position  String
+  date      String
+  time      String
+  type      String?  @default("online")
+  location  String?
+  status    String   @default("upcoming") // upcoming, completed, canceled, rejected
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VacancyResponse {
+  id          String   @id @default(uuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id])
+  vacancyId   String?  // Reference to external or internal Vacancy
+  company     String
+  position    String
+  status      String   @default("sent") // sent, viewing, invited, rejected
+  statusColor String   @default("bg-blue-500")
+  responseDate DateTime @default(now())
 }
 
 model Vacancy {
-  id                 String   @id @default(uuid())
-  hhId               String   @unique  // ID вакансии на HH.ru
+  id                 String    @id @default(uuid())
+  hhId               String    @unique  // ID вакансии на HH.ru
   title              String
   employer           String
   location           String?
@@ -80,11 +125,124 @@ model Vacancy {
   salaryTo           Int?
   salaryCurrency     String?
   salaryLabel        String?
-  skills             Json?    // Массив ключевых навыков
+  skills             Json?    // Массив ключевых навыков (legacy, сохранён для fallback)
   descriptionPreview String?
   experience         String?
   schedule           String?
-  searchQuery        String   // Поисковый запрос, по которому найдена вакансия
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  url                String?  // Ссылка на оригинальную вакансию
+  searchQuery        String   // Поисковый запрос, по которому найдена вакансию на площадке
+  publishedAt        DateTime? // Дата публикации вакансии на площадке
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  vacancySkills      VacancySkill[]
+  interactions       VacancyInteraction[]
+  favorites          FavoriteVacancy[]
+}
+
+model FavoriteVacancy {
+  profileId String
+  vacancyId String
+  createdAt DateTime @default(now())
+
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  vacancy   Vacancy  @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, vacancyId])
+  @@index([profileId])
+}
+
+// Behavioral signals — tracks candidate interactions with vacancies
+model VacancyInteraction {
+  id          String   @id @default(uuid())
+  profileId   String
+  vacancyId   String
+  // click | apply | favorite | analyze | dismiss
+  type        String
+  createdAt   DateTime @default(now())
+
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  vacancy     Vacancy  @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, vacancyId, type])
+  @@index([profileId, type])
+}
+
+// ---------------------------------------------------------------------------
+// Normalized Skills System
+// ---------------------------------------------------------------------------
+
+model Skill {
+  id        String   @id @default(uuid())
+  name      String   @unique // Canonical name: "React", "PostgreSQL", "Docker"
+  category  String?  // "Frontend" | "Backend" | "DevOps" | "Data" | "Mobile" | "Soft"
+  aliases   String[] // ["react.js", "reactjs"] for fuzzy lookup
+  createdAt DateTime @default(now())
+
+  profileSkills ProfileSkill[]
+  vacancySkills VacancySkill[]
+}
+
+model ProfileSkill {
+  profileId String
+  skillId   String
+  level     String? // "beginner" | "intermediate" | "expert"
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, skillId])
+}
+
+model VacancySkill {
+  vacancyId  String
+  skillId    String
+  isRequired Boolean @default(true)
+
+  vacancy Vacancy @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([vacancyId, skillId])
+}
+
+model RecommendationImpression {
+  id           String   @id @default(uuid())
+  profileId    String
+  vacancyId    String
+  position     Int
+  score        Float
+  modelVersion String   @default("rule-based-v1")
+  createdAt    DateTime @default(now())
+
+  @@index([profileId, createdAt])
+}
+
+// Career assessment quiz results
+model CareerAssessment {
+  id              String   @id @default(uuid())
+  profileId       String
+  profile         Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  domain          String   // 'it' | 'finance' | 'marketing' | 'management' | 'creative' | 'other'
+  answers         Json     // Array of { questionId, optionIndex }
+  dimensionScores Json     // { analytical, technical, social, creative, leadership, structured }
+  result          Json     // AI-generated result (personalitySummary, dominantTraits, topPaths[])
+  createdAt       DateTime @default(now())
+
+  @@index([profileId, createdAt])
+}
+
+// Tracks trained ML model versions and their evaluation metrics
+model MLModelVersion {
+  id           String   @id @default(uuid())
+  version      String   @unique  // "stub-v0", "lgbm-v1"
+  algorithm    String            // "stub", "lgbm", "logreg"
+  trainedAt    DateTime
+  precision10  Float?            // precision@10
+  ndcg10       Float?            // NDCG@10
+  auc          Float?
+  isActive     Boolean  @default(false)
+  artefactPath String?           // path to serialized model file
+  trainSamples Int?              // number of training samples used
+  notes        String?
+  createdAt    DateTime @default(now())
 }

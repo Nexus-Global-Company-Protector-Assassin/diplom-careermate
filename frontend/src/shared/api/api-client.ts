@@ -1,16 +1,16 @@
+import { ApiError, classifyError } from '@/shared/lib/api-errors';
+
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 class ApiClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
-    
-    // Default headers
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...((options.headers as Record<string, string>) || {}),
     };
 
-    // Client-side execution: attempt to attach JWT token if it exists
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('access_token');
       if (token) {
@@ -18,28 +18,31 @@ class ApiClient {
       }
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
-
-    if (!response.ok) {
-        let errorMessage = 'An error occurred';
-        try {
-            const errorData = await response.json();
-            errorMessage = errorData.message || errorMessage;
-        } catch (e) {
-            errorMessage = response.statusText;
-        }
-        throw new Error(errorMessage);
+    let response: Response;
+    try {
+      response = await fetch(url, { ...options, headers });
+    } catch (err) {
+      throw new ApiError('Нет соединения с сервером', 0, 'network');
     }
 
-    // Attempt to parse JSON response
+    if (!response.ok) {
+      let errorMessage = response.statusText || 'Ошибка запроса';
+      let errorBody: Record<string, unknown> | undefined;
+      try {
+        errorBody = await response.json();
+        if (errorBody && typeof errorBody.message === 'string') errorMessage = errorBody.message;
+        else if (errorBody && Array.isArray(errorBody.message)) errorMessage = (errorBody.message as string[])[0];
+      } catch {
+        // keep statusText
+      }
+      throw classifyError(response.status, errorMessage, errorBody);
+    }
+
     try {
-        const data = await response.json();
-        return data as T;
+      const data = await response.json();
+      return data as T;
     } catch {
-        return null as T;
+      return null as T;
     }
   }
 

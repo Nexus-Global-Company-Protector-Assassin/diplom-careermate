@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+// @ts-ignore
 import * as pdfParse from 'pdf-parse';
+// @ts-ignore
 import * as mammoth from 'mammoth';
 
 @Injectable()

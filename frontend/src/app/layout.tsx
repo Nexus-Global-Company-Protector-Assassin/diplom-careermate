@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/shared/context/theme-context"
 import { SidebarProvider } from "@/shared/context/sidebar-context"
 import { CoreQueryProvider } from "@/app/providers/query-provider"
 import { ToastProvider } from "@/shared/ui/toast-notification"
+import { Toaster } from "@/shared/ui/sonner"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin", "cyrillic"] })
@@ -22,11 +23,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru" suppressHydrationWarning>
-      <body className={`font-sans antialiased`}>
+      <body className={`font-sans antialiased`} suppressHydrationWarning>
         <CoreQueryProvider>
           <ThemeProvider>
             <SidebarProvider>
-              <ToastProvider>{children}</ToastProvider>
+              <ToastProvider>
+                {children}
+                <Toaster richColors position="top-right" />
+              </ToastProvider>
             </SidebarProvider>
           </ThemeProvider>
         </CoreQueryProvider>

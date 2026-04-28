@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -69,14 +69,14 @@ export class AuthService {
             this.jwtService.signAsync(
                 { sub: userId, email },
                 {
-                    secret: this.configService.get<string>('JWT_SECRET') || 'secretKey',
+                    secret: this.configService.getOrThrow<string>('JWT_SECRET'),
                     expiresIn: '15m',
                 },
             ),
             this.jwtService.signAsync(
                 { sub: userId, email },
                 {
-                    secret: this.configService.get<string>('JWT_REFRESH_SECRET') || 'refreshSecretKey',
+                    secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
                     expiresIn: '7d',
                 },
             ),

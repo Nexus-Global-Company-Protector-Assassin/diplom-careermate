@@ -19,9 +19,16 @@ async function getLatestResult() {
 export default async function PocResultPage() {
   const resultObj = await getLatestResult();
   const data = resultObj?.content || {};
-  const vacancies = data.vacancies || [];
-  const recommendations = data.recommendations || [];
-  const skills = data.skillGaps || [];
+  const analysis = data.analysis || {};
+  const vacanciesData = data.vacancies || {};
+  const vacancies = vacanciesData.vacancies || [];
+  
+  const generatedResume = data.resume || {};
+  const recommendations = generatedResume.recommendations || [];
+  const autoFixed = generatedResume.autoFixed || [];
+  const skillsGaps = analysis.skillGaps || [];
+  const aiScore = analysis.score || 0;
+  const level = analysis.level || 'Junior';
   return (
     <MainLayout>
       <div className="space-y-6 max-w-4xl mx-auto py-8 animate-in fade-in zoom-in-95 duration-500">
@@ -51,7 +58,7 @@ export default async function PocResultPage() {
                 Подходящие вакансии с HH.ru
               </CardTitle>
               <CardDescription>
-                Для расчёта использован AI Score: {data.score || 0}/100. Ваш уровень: {data.level || 'Junior'}
+                Для расчёта использован AI Score: {aiScore}/100. Ваш уровень: {level}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
@@ -99,27 +106,71 @@ export default async function PocResultPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
-              <div className="bg-muted/30 p-4 rounded-lg font-mono text-sm max-h-[400px] overflow-y-auto border border-border/50 prose dark:prose-invert">
-                <h3>Баранов Сергей</h3>
-                <p><strong>Цель:</strong> Senior Data / Product Analyst</p>
-                <h4>Summary</h4>
-                <p>Опытный специалист. На основе анализа профиля сформированы следующие рекомендации:</p>
-                <h4>Рекомендации от AI</h4>
-                <ul>
-                  {recommendations.length > 0 ? recommendations.map((rec: string, rIdx: number) => (
-                      <li key={rIdx}>{rec}</li>
-                  )) : (
-                      <li>Рекомендации скоро появятся</li>
-                  )}
-                </ul>
-                <h4>Skill Gaps (Что подкачать)</h4>
-                <ul>
-                  {skills.length > 0 ? skills.map((skill: string, sIdx: number) => (
-                      <li key={sIdx}>{skill}</li>
-                  )) : (
-                      <li>Не обнаружено существенных гэпов</li>
-                  )}
-                </ul>
+              <div className="bg-muted/30 p-4 rounded-lg font-mono text-sm max-h-[500px] overflow-y-auto border border-border/50 prose dark:prose-invert">
+                {generatedResume.fullName ? (
+                    <>
+                        <h3 className="mt-0">{generatedResume.fullName}</h3>
+                        <p><strong>Цель:</strong> {generatedResume.targetPosition}</p>
+                        
+                        <h4>Summary</h4>
+                        <p>{generatedResume.summary}</p>
+
+                        {generatedResume.experience && generatedResume.experience.length > 0 && (
+                            <>
+                                <h4>Опыт работы</h4>
+                                {generatedResume.experience.map((exp: any, i: number) => (
+                                    <div key={i} className="mb-4">
+                                        <p className="font-semibold text-base mb-0 leading-tight">{exp.position} в {exp.company}</p>
+                                        <p className="text-muted-foreground text-xs mt-1 mb-2">{exp.period}</p>
+                                        <ul className="list-disc pl-5 mt-1">
+                                            {exp.achievements?.map((ach: string, j: number) => (
+                                                <li key={j} className="mb-1">{ach}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+                        
+                        <hr className="my-6 border-border" />
+                        
+                        <h4 className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                          <CheckCircle2 className="w-5 h-5" /> Что ИИ исправил автоматически
+                        </h4>
+                        <ul>
+                            {autoFixed.length > 0 ? autoFixed.map((fix: string, fIdx: number) => (
+                                <li key={fIdx}>{fix}</li>
+                            )) : (
+                                <li>Автоматических исправлений нет</li>
+                            )}
+                        </ul>
+
+                        <h4 className="flex items-center gap-2 text-orange-600 dark:text-orange-400">
+                          <AlertCircle className="w-5 h-5" /> Раздел для вашей ручной проработки
+                        </h4>
+                        <ul>
+                            {recommendations.length > 0 ? recommendations.map((rec: string, rIdx: number) => (
+                                <li key={rIdx}>{rec}</li>
+                            )) : (
+                                <li>Нет ручных рекомендаций</li>
+                            )}
+                        </ul>
+
+                        <h4>Skill Gaps (Что подкачать для этой роли)</h4>
+                        <ul>
+                          {skillsGaps.length > 0 ? skillsGaps.map((skill: string, sIdx: number) => (
+                              <li key={sIdx}>{skill}</li>
+                          )) : (
+                              <li>Не обнаружено существенных гэпов</li>
+                          )}
+                        </ul>
+                    </>
+                ) : (
+                    <div className="text-center p-8 text-muted-foreground">
+                        <AlertCircle className="w-12 h-12 opacity-50 mx-auto mb-4" />
+                        <p>ИИ обрабатывает ваш профиль. Пожалуйста, подождите или запустите анализ.</p>
+                    </div>
+                )}
                 <p className="text-muted-foreground text-xs text-center mt-4 border-t pt-4">Это превью сгенерированного резюме. Нажмите ниже, чтобы скачать полную версию.</p>
               </div>
               <div className="flex gap-3 mt-6">
