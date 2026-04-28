@@ -8,6 +8,17 @@ import { AiService } from '../ai/ai.service';
 import { SkillsService } from '../skills/skills.service';
 import { of, throwError } from 'rxjs';
 import { EmbeddingsService } from '../ai/embeddings/embeddings.service';
+import { QuestionGenService } from '../interviews/question-gen/question-gen.service';
+import { UserPreferencesService } from './user-preferences.service';
+import { RedisService } from '../redis/redis.service';
+import { MlRankingService } from '../ml/ml-ranking.service';
+import { QuotaService } from '../quota/quota.service';
+
+const makeQuotaService = () => ({
+    assertAiCall: jest.fn().mockResolvedValue(undefined),
+    commitAiCall: jest.fn().mockResolvedValue(undefined),
+    assertResumeLimit: jest.fn().mockResolvedValue(undefined),
+});
 
 // ──────────────────────────────── mock data ──────────────────────────────────
 const mockVacancy = {
@@ -54,10 +65,20 @@ const mockAdzunaResponse = {
 // ─────────────────────────────── mock factories ───────────────────────────────
 const makePrisma = () => ({
     vacancy: {
-        findMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         upsert: jest.fn(),
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
         count: jest.fn().mockResolvedValue(0),
+    },
+    profile: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'profile-uuid-1' }),
+    },
+    vacancyInteraction: {
+        upsert: jest.fn().mockResolvedValue({}),
+        findMany: jest.fn().mockResolvedValue([]),
+    },
+    recommendationImpression: {
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
 });
 
@@ -74,11 +95,35 @@ const makeAiService = () => ({
 const makeSkillsService = () => ({
     extractFromText: jest.fn().mockResolvedValue([]),
     syncVacancySkills: jest.fn().mockResolvedValue(undefined),
+    getExpandedSkillNames: jest.fn().mockResolvedValue([]),
 });
 
 const makeEmbeddingsService = () => ({
     indexVacancy: jest.fn().mockResolvedValue(undefined),
     searchSimilar: jest.fn().mockResolvedValue([]),
+});
+
+const makeQuestionGenService = () => ({
+    generateForVacancy: jest.fn().mockResolvedValue({ questions: [], candidate_questions: [], tips: '' }),
+});
+
+const makeUserPreferences = () => ({
+    compute: jest.fn().mockResolvedValue({ archetype: {}, salary_band: {}, work_format: {}, seniority: {} }),
+    extractVacancyFeatures: jest.fn().mockReturnValue({ archetype: {}, salary_band: {}, work_format: {}, seniority: {} }),
+    computePersonalScore: jest.fn().mockReturnValue(0),
+    invalidateCache: jest.fn().mockResolvedValue(undefined),
+});
+
+const makeMlRanking = () => ({
+    isEnabled: jest.fn().mockReturnValue(false),
+    isShadowMode: jest.fn().mockReturnValue(true),
+    rank: jest.fn().mockResolvedValue(new Map()),
+});
+
+const makeRedis = () => ({
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue('OK'),
+    del: jest.fn().mockResolvedValue(1),
 });
 
 const makeConfig = (overrides: Record<string, string> = {}) => ({
@@ -116,6 +161,11 @@ describe('VacanciesService', () => {
                 { provide: AiService, useValue: makeAiService() },
                 { provide: SkillsService, useValue: makeSkillsService() },
                 { provide: EmbeddingsService, useValue: makeEmbeddingsService() },
+                { provide: QuestionGenService, useValue: makeQuestionGenService() },
+                { provide: UserPreferencesService, useValue: makeUserPreferences() },
+                { provide: RedisService, useValue: makeRedis() },
+                { provide: MlRankingService, useValue: makeMlRanking() },
+                { provide: QuotaService, useValue: makeQuotaService() },
             ],
         }).compile();
 
@@ -274,6 +324,11 @@ describe('VacanciesService', () => {
                     { provide: AiService, useValue: makeAiService() },
                     { provide: SkillsService, useValue: makeSkillsService() },
                     { provide: EmbeddingsService, useValue: makeEmbeddingsService() },
+                    { provide: QuestionGenService, useValue: makeQuestionGenService() },
+                    { provide: UserPreferencesService, useValue: makeUserPreferences() },
+                    { provide: RedisService, useValue: makeRedis() },
+                    { provide: MlRankingService, useValue: makeMlRanking() },
+                    { provide: QuotaService, useValue: makeQuotaService() },
                 ],
             }).compile();
 
@@ -317,6 +372,101 @@ describe('VacanciesService', () => {
 
             const searchCall = http.get.mock.calls[0];
             expect(searchCall[1].params.results_per_page).toBe(50);
+        });
+    });
+
+    // ─────────────────────────────── recordInteraction ───────────────────────
+    describe('recordInteraction', () => {
+        it('does nothing for unknown interaction types', async () => {
+            await service.recordInteraction('vac-1', 'unknown', 'user-1');
+            expect(prisma.vacancyInteraction.upsert).not.toHaveBeenCalled();
+        });
+
+        it('does nothing when profile is not found for userId', async () => {
+            prisma.profile.findFirst.mockResolvedValue(null);
+            await service.recordInteraction('vac-1', 'click', 'user-1');
+            expect(prisma.vacancyInteraction.upsert).not.toHaveBeenCalled();
+        });
+
+        it('upserts interaction and invalidates cache when profile exists', async () => {
+            prisma.profile.findFirst.mockResolvedValue({ id: 'profile-uuid-1' });
+            const userPrefs = (service as any).userPreferences;
+            await service.recordInteraction('vac-1', 'click', 'user-1');
+            expect(prisma.vacancyInteraction.upsert).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { profileId_vacancyId_type: { profileId: 'profile-uuid-1', vacancyId: 'vac-1', type: 'click' } },
+                    create: expect.objectContaining({ profileId: 'profile-uuid-1', vacancyId: 'vac-1', type: 'click' }),
+                }),
+            );
+            expect(userPrefs.invalidateCache).toHaveBeenCalledWith('profile-uuid-1');
+        });
+    });
+
+    // ──────────────────────── getRecommendedForProfile ───────────────────────
+    describe('getRecommendedForProfile', () => {
+        const makeVacancy = (overrides: Partial<any> = {}): any => ({
+            id: 'vac-1',
+            hhId: 'hh-1',
+            title: 'Backend Developer',
+            employer: 'Acme',
+            location: 'London',
+            salaryFrom: 50000,
+            salaryTo: 60000,
+            salaryCurrency: 'GBP',
+            salaryLabel: '50k-60k £',
+            skills: ['node.js', 'typescript'],
+            descriptionPreview: 'We need a backend developer with node.js experience.',
+            schedule: 'Полная занятость',
+            searchQuery: 'Backend Developer',
+            publishedAt: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            ...overrides,
+        });
+
+        beforeEach(() => {
+            prisma.vacancy.findMany.mockResolvedValue([makeVacancy()]);
+            prisma.vacancy.count.mockResolvedValue(10);
+        });
+
+        it('returns empty array when no vacancies match', async () => {
+            prisma.vacancy.findMany.mockResolvedValue([]);
+            const result = await service.getRecommendedForProfile('Backend', [], 10, undefined, 'user-1');
+            expect(Array.isArray(result)).toBe(true);
+        });
+
+        it('looks up profile by userId, not by findFirst without filter', async () => {
+            await service.getRecommendedForProfile('Backend', [], 10, undefined, 'user-1');
+            expect(prisma.profile.findFirst).toHaveBeenCalledWith(
+                expect.objectContaining({ where: { userId: 'user-1' } }),
+            );
+        });
+
+        it('calls userPreferences.compute with the resolved profileId', async () => {
+            prisma.profile.findFirst.mockResolvedValue({ id: 'profile-uuid-1' });
+            const userPrefs = (service as any).userPreferences;
+            await service.getRecommendedForProfile('Backend', [], 10, undefined, 'user-1');
+            expect(userPrefs.compute).toHaveBeenCalledWith('profile-uuid-1');
+        });
+
+        it('logs RecommendationImpression non-blockingly after returning results', async () => {
+            prisma.profile.findFirst.mockResolvedValue({ id: 'profile-uuid-1' });
+            prisma.vacancyInteraction.findMany.mockResolvedValue([]);
+            await service.getRecommendedForProfile('Backend', [], 10, undefined, 'user-1');
+            await new Promise(r => setImmediate(r));
+            expect(prisma.recommendationImpression.createMany).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: expect.arrayContaining([
+                        expect.objectContaining({ profileId: 'profile-uuid-1', modelVersion: 'rule-based-v1' }),
+                    ]),
+                }),
+            );
+        });
+
+        it('skips impression logging when no userId provided', async () => {
+            await service.getRecommendedForProfile('Backend', [], 10);
+            await new Promise(r => setImmediate(r));
+            expect(prisma.recommendationImpression.createMany).not.toHaveBeenCalled();
         });
     });
 });

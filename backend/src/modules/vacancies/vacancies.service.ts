@@ -6,90 +6,17 @@ import { firstValueFrom } from 'rxjs';
 import { AiService } from '../ai/ai.service';
 import { SkillsService } from '../skills/skills.service';
 import { EmbeddingsService } from '../ai/embeddings/embeddings.service';
+import { QuestionGenService } from '../interviews/question-gen/question-gen.service';
+import { UserPreferencesService } from './user-preferences.service';
+import { MlRankingService } from '../ml/ml-ranking.service';
+import { detectArchetype, calcVacancyFreshness, RoleArchetype } from './vacancies.utils';
+import { QuotaService } from '../quota/quota.service';
+
+export { detectArchetype, calcVacancyFreshness };
+export type { RoleArchetype };
 
 // Adzuna API base URL
 const ADZUNA_API = 'https://api.adzuna.com/v1/api/jobs';
-
-// Local skills extraction removed. Now using SkillsService with LLM.
-// ---------------------------------------------------------------------------
-// Archetype Detection — inspired by career-ops role classification
-// ---------------------------------------------------------------------------
-export type RoleArchetype = 'Backend' | 'Frontend' | 'Fullstack' | 'Mobile' | 'DevOps' | 'ML/Data' | 'QA' | 'Manager' | 'Unknown';
-
-export function detectArchetype(title: string, description: string): RoleArchetype {
-    const text = `${title} ${description}`.toLowerCase();
-
-    const signals: Record<RoleArchetype, string[]> = {
-        'ML/Data': ['machine learning', 'ml ', ' ml,', 'data science', 'data scientist', 'nlp', 'computer vision', 'deep learning', 'pytorch', 'tensorflow', 'sklearn', 'scikit', 'data analyst', 'аналитик данных', 'data engineer', 'etl', 'spark', 'hadoop', 'airflow', 'bigquery', 'snowflake'],
-        'DevOps': ['devops', 'sre', 'site reliability', 'kubernetes', 'k8s', 'docker', 'terraform', 'ansible', 'ci/cd', 'jenkins', 'gitlab ci', 'github actions', 'infrastructure', 'инфраструктур', 'облачн', 'cloud engineer', 'platform engineer'],
-        'Mobile': ['android', 'ios', 'swift', 'kotlin', 'react native', 'flutter', 'mobile developer', 'мобильн'],
-        'Frontend': ['frontend', 'фронтенд', 'front-end', 'react', 'vue', 'angular', 'svelte', 'next.js', 'nuxt', 'ui developer', 'web developer', 'верстальщик', 'html/css'],
-        'Backend': ['backend', 'бэкенд', 'back-end', 'node.js', 'python developer', 'java developer', 'golang', 'go developer', 'php developer', 'ruby', 'spring', 'django', 'fastapi', 'nestjs', 'серверн'],
-        'Fullstack': ['fullstack', 'full stack', 'full-stack', 'фулстек', 'full stack developer'],
-        'QA': ['qa ', 'quality assurance', 'tester', 'тестировщик', 'тестировани', 'automation qa', 'manual qa', 'sdet', 'selenium', 'cypress', 'playwright'],
-        'Manager': ['product manager', 'project manager', 'engineering manager', 'team lead', 'tech lead', 'scrum master', 'менеджер продукта', 'руководитель', 'тимлид', 'cto', 'vp of engineering'],
-        'Unknown': [],
-    };
-
-    const scores: Partial<Record<RoleArchetype, number>> = {};
-    for (const [archetype, keywords] of Object.entries(signals)) {
-        if (archetype === 'Unknown') continue;
-        let score = 0;
-        for (const kw of keywords) {
-            if (text.includes(kw)) score++;
-        }
-        if (score > 0) scores[archetype as RoleArchetype] = score;
-    }
-
-    // Fullstack check: if BOTH frontend and backend signals are strong
-    const fScore = scores['Frontend'] || 0;
-    const bScore = scores['Backend'] || 0;
-    if (fScore >= 2 && bScore >= 2) return 'Fullstack';
-    if (scores['Fullstack'] && scores['Fullstack']! >= 1) return 'Fullstack';
-
-    if (Object.keys(scores).length === 0) return 'Unknown';
-    const best = Object.entries(scores).sort(([, a], [, b]) => b - a)[0];
-    return best ? (best[0] as RoleArchetype) : 'Unknown';
-}
-
-// ---------------------------------------------------------------------------
-// Vacancy Freshness Score — returns 0-100
-// Inspired by career-ops Block G: Posting Legitimacy
-// ---------------------------------------------------------------------------
-export function calcVacancyFreshness(publishedAt: Date | null | undefined, createdAt: Date, updatedAt?: Date | null): {
-    score: number;
-    label: string;
-    daysOld: number;
-} {
-    const now = new Date();
-    const ref = publishedAt || updatedAt || createdAt;
-    const daysOld = Math.floor((now.getTime() - new Date(ref).getTime()) / (1000 * 60 * 60 * 24));
-
-    let score: number;
-    let label: string;
-
-    if (daysOld <= 3) {
-        score = 100;
-        label = 'Только что';
-    } else if (daysOld <= 7) {
-        score = 90;
-        label = 'Свежая';
-    } else if (daysOld <= 14) {
-        score = 75;
-        label = 'Активная';
-    } else if (daysOld <= 30) {
-        score = 55;
-        label = 'Может быть устаревшей';
-    } else if (daysOld <= 60) {
-        score = 30;
-        label = 'Подозрительная';
-    } else {
-        score = 10;
-        label = 'Вероятно закрытая';
-    }
-
-    return { score, label, daysOld };
-}
 
 // ---------------------------------------------------------------------------
 // Gap Analysis — returns matched/missing skills
@@ -139,8 +66,13 @@ function analyzeSkillGap(
 }
 
 // ---------------------------------------------------------------------------
-// Match calculation — returns 0-100 (6-component, career-ops inspired)
+// Match calculation — returns score + human-readable reasons
 // ---------------------------------------------------------------------------
+export interface MatchResult {
+    score: number;
+    reasons: string[];
+}
+
 function calcMatch(
     vTitle: string,
     vSkills: string[],
@@ -151,8 +83,9 @@ function calcMatch(
     vLabel: string | null | undefined,
     dPos: string,
     pSkills: string[],
-    pSalary: number | null | undefined
-): number {
+    pSalary: number | null | undefined,
+    pExpandedSkills?: string[],  // graph-adjacent skills for soft matching
+): MatchResult {
     const W_ROLE = 0.25; const W_SKILLS = 0.30; const W_SENIORITY = 0.15;
     const W_SALARY = 0.15; const W_DESC = 0.05; const W_ARCHETYPE = 0.10;
     
@@ -184,9 +117,15 @@ function calcMatch(
         seniorityScore = vSen === dSen ? 100 : Math.abs(vSen - dSen) === 1 ? 55 : 15;
     } else seniorityScore = (vSen === 0 && dSen === 0) ? 70 : 50;
 
-    // 3. Skills via Gap Analysis
-    const gap = analyzeSkillGap(vSkills, descLower, pSkills);
-    const skillScore = gap.score;
+    // 3. Skills via Gap Analysis (exact match + graph-expanded soft match)
+    const exactGap = analyzeSkillGap(vSkills, descLower, pSkills);
+    const softGap = pExpandedSkills?.length
+        ? analyzeSkillGap(vSkills, descLower, [...pSkills, ...pExpandedSkills])
+        : null;
+    // Blend: 70% exact Jaccard + 30% soft (graph-adjacent) when KG data available
+    const skillScore = softGap
+        ? Math.round(exactGap.score * 0.7 + softGap.score * 0.3)
+        : exactGap.score;
 
     // 4. Salary Score
     const getRate = (cur: string) => {
@@ -250,7 +189,25 @@ function calcMatch(
     if (seniorityScore <= 15)  finalScore *= 0.65;
     if (archetypeScore <= 20 && desiredArchetype !== 'Unknown') finalScore *= 0.80;
 
-    return Math.max(0, Math.min(100, Math.round(finalScore)));
+    const score = Math.max(0, Math.min(100, Math.round(finalScore)));
+
+    // Build human-readable reasons
+    const reasons: string[] = [];
+    if (roleScore >= 70) reasons.push('Должность совпадает');
+    else if (roleScore <= 8) reasons.push('Должность не совпадает');
+
+    const gap2 = analyzeSkillGap(vSkills, (vDesc || '').toLowerCase(), pSkills);
+    if (gap2.matchedSkills.length > 0) {
+        reasons.push(`Навыки совпадают: ${gap2.matchedSkills.slice(0, 3).join(', ')}`);
+    }
+    if (gap2.missingSkills.length > 0) {
+        reasons.push(`Нет в профиле: ${gap2.missingSkills.slice(0, 3).join(', ')}`);
+    }
+    if (seniorityScore >= 70) reasons.push('Уровень совпадает');
+    if (salaryScore >= 80) reasons.push('Зарплата соответствует ожиданиям');
+    if (archetypeScore === 100) reasons.push(`Тип роли совпадает (${vacancyArchetype})`);
+
+    return { score, reasons };
 }
 
 
@@ -286,6 +243,10 @@ export class VacanciesService {
         private readonly aiService: AiService,
         private readonly skillsService: SkillsService,
         private readonly embeddingsService: EmbeddingsService,
+        private readonly questionGenService: QuestionGenService,
+        private readonly userPreferences: UserPreferencesService,
+        private readonly mlRanking: MlRankingService,
+        private readonly quota: QuotaService,
     ) { }
 
     /**
@@ -349,7 +310,8 @@ export class VacanciesService {
         position: string,
         profileSkills: string[],
         limit = 10,
-        salary?: number
+        salary?: number,
+        userId?: string,
     ): Promise<any[]> {
         // Check if we have enough vacancies for this position in DB
         const existing = await this.prisma.vacancy.count({
@@ -405,22 +367,31 @@ export class VacanciesService {
         }
         // ─────────────────────────────────────────────────────────────────────
 
+        // Graph-expanded skills: traverse CO_OCCURS_WITH from profile skills
+        // to find adjacent skills for soft matching (fire-and-forget safe — empty array on failure)
+        const expandedSkills = await this.skillsService
+            .getExpandedSkillNames(profileSkills, 20)
+            .catch(() => [] as string[]);
+
         // Calculate match, archetype, gap, freshness, and combined score for each
         const ranked = dbVacancies
             .map((v: any) => {
                 const skills = Array.isArray(v.skills) ? (v.skills as string[]) : [];
                 const desc = v.descriptionPreview || '';
 
-                const matchScore = calcMatch(
+                const matchResult = calcMatch(
                     v.title, skills, desc,
                     v.salaryFrom, v.salaryTo, v.salaryCurrency, v.salaryLabel,
-                    position, profileSkills, salary
+                    position, profileSkills, salary,
+                    expandedSkills,
                 );
+                const matchScore = matchResult.score;
+                const matchReasons = matchResult.reasons;
 
                 // Archetype detection (career-ops inspired)
                 const archetype = detectArchetype(v.title, desc);
 
-                // Gap analysis — matched vs missing skills
+                // Gap analysis — matched vs missing skills (reuse from calcMatch result)
                 const normalise = (s: string) => s.toLowerCase().trim();
                 const vSkillsNorm = skills.map(normalise);
                 const gap = (function () {
@@ -437,17 +408,139 @@ export class VacanciesService {
                 // Freshness (Ghost Job pre-check)
                 const freshness = calcVacancyFreshness(v.publishedAt, v.createdAt, v.updatedAt);
 
-                // Hybrid score: 60% keyword match + 40% semantic similarity
+                // Hybrid score: 50% keyword match + 30% semantic (+ 20% personal when userId present)
                 const semanticScore = semanticRank.get(v.id) ?? 0;
-                const combinedScore = 0.6 * (matchScore / 100) + 0.4 * semanticScore;
+                const combinedScore = 0.5 * (matchScore / 100) + 0.3 * semanticScore;
 
-                return { ...v, matchScore, archetype, ...gap, freshness, semanticScore, combinedScore };
+                return { ...v, matchScore, matchReasons, archetype, ...gap, freshness, semanticScore, combinedScore };
             })
             .filter((v: any) => v.matchScore > 20 || v.semanticScore > 0.3)
             .sort((a: any, b: any) => b.combinedScore - a.combinedScore)
-            .slice(0, limit);
+            .slice(0, limit * 2); // fetch wider set before behavioral filter
 
-        return ranked;
+        // ── Behavioral re-ranking ────────────────────────────────────────────────
+        const profile = userId
+            ? await this.prisma.profile.findFirst({ where: { userId }, select: { id: true } })
+            : null;
+        const profileId = profile?.id;
+
+        if (profileId) {
+            const [prefs, dismissed] = await Promise.all([
+                this.userPreferences.compute(profileId),
+                this.prisma.vacancyInteraction.findMany({
+                    where: { profileId, type: 'dismiss' },
+                    select: { vacancyId: true },
+                }),
+            ]);
+
+            const dismissedIds = new Set(dismissed.map(i => i.vacancyId));
+
+            const reranked = ranked
+                .filter((v: any) => !dismissedIds.has(v.id))
+                .map((v: any) => {
+                    const features = this.userPreferences.extractVacancyFeatures(v);
+                    const personalScore = this.userPreferences.computePersonalScore(prefs, features);
+                    return {
+                        ...v,
+                        personalScore,
+                        combinedScore: 0.5 * (v.matchScore / 100) + 0.3 * v.semanticScore + 0.2 * personalScore,
+                    };
+                })
+                .sort((a: any, b: any) => b.combinedScore - a.combinedScore)
+                .slice(0, limit);
+
+            this.prisma.recommendationImpression.createMany({
+                data: reranked.map((v: any, idx: number) => ({
+                    profileId,
+                    vacancyId: v.id,
+                    position: idx + 1,
+                    score: v.combinedScore,
+                    modelVersion: 'rule-based-v1',
+                })),
+            }).catch((e: any) => this.logger.warn(`[Impression] Log failed: ${e.message}`));
+
+            // ── ML shadow mode ────────────────────────────────────────────────────
+            // Call ml-service for comparison logging. In shadow mode, scores are
+            // not applied — rule-based order is returned. Flip ML_SHADOW_MODE=false
+            // to switch to ML ranking after validating metrics.
+            if (this.mlRanking.isEnabled()) {
+                const ruleTop3 = reranked.slice(0, 3).map((v: any) => v.id).join(',');
+                this.mlRanking.rank(profileId, reranked, prefs).then(mlScores => {
+                    if (mlScores.size > 0) {
+                        const mlTop3 = [...reranked]
+                            .sort((a: any, b: any) => (mlScores.get(b.id) || 0) - (mlScores.get(a.id) || 0))
+                            .slice(0, 3)
+                            .map((v: any) => v.id)
+                            .join(',');
+                        this.logger.log(`[ML Shadow] rule-based TOP-3: ${ruleTop3} | ml TOP-3: ${mlTop3}`);
+                    }
+                }).catch(() => { /* non-critical */ });
+            }
+            // ────────────────────────────────────────────────────────────────────
+
+            return reranked;
+        }
+        // ─────────────────────────────────────────────────────────────────────────
+
+        return ranked.slice(0, limit);
+    }
+
+    /**
+     * Record a behavioral interaction signal (click/apply/favorite/analyze/dismiss).
+     * Uses upsert to avoid duplicate rows — re-interactions refresh the timestamp.
+     */
+    async getFavorites(userId: string): Promise<string[]> {
+        const profile = await this.prisma.profile.findFirst({ where: { userId }, select: { id: true } });
+        if (!profile) return [];
+
+        const rows = await this.prisma.favoriteVacancy.findMany({
+            where: { profileId: profile.id },
+            select: { vacancyId: true },
+            orderBy: { createdAt: 'desc' },
+        });
+        return rows.map(r => r.vacancyId);
+    }
+
+    async toggleFavorite(vacancyId: string, userId: string): Promise<{ isFavorite: boolean }> {
+        const profile = await this.prisma.profile.findFirst({ where: { userId }, select: { id: true } });
+        if (!profile) return { isFavorite: false };
+
+        const existing = await this.prisma.favoriteVacancy.findUnique({
+            where: { profileId_vacancyId: { profileId: profile.id, vacancyId } },
+        });
+
+        if (existing) {
+            await this.prisma.favoriteVacancy.delete({
+                where: { profileId_vacancyId: { profileId: profile.id, vacancyId } },
+            });
+            return { isFavorite: false };
+        }
+
+        await this.prisma.favoriteVacancy.create({
+            data: { profileId: profile.id, vacancyId },
+        });
+
+        await this.recordInteraction(vacancyId, 'favorite', userId);
+        return { isFavorite: true };
+    }
+
+    async recordInteraction(vacancyId: string, type: string, userId?: string): Promise<void> {
+        const allowed = ['click', 'apply', 'favorite', 'analyze', 'dismiss'];
+        if (!allowed.includes(type)) return;
+
+        const profile = userId
+            ? await this.prisma.profile.findFirst({ where: { userId }, select: { id: true } })
+            : null;
+        if (!profile) return;
+
+        await this.prisma.vacancyInteraction.upsert({
+            where: { profileId_vacancyId_type: { profileId: profile.id, vacancyId, type } },
+            create: { profileId: profile.id, vacancyId, type },
+            update: { createdAt: new Date() },
+        });
+
+        await this.userPreferences.invalidateCache(profile.id);
+        this.logger.log(`[Interaction] type=${type} vacancy=${vacancyId} profile=${profile.id}`);
     }
 
     /**
@@ -617,7 +710,7 @@ export class VacanciesService {
     /**
      * AI Deep Analysis (7-block evaluation + Ghost Job Detection) for a specific vacancy
      */
-    async evaluateVacancy(id: string, resumeId?: string) {
+    async evaluateVacancy(id: string, resumeId?: string, userId?: string) {
         // Find the vacancy safely
         let vacancy: any = null;
         try {
@@ -635,15 +728,19 @@ export class VacanciesService {
             throw new Error(`Vacancy with ID ${id} not found`);
         }
 
+        if (userId) await this.quota.assertAiCall(userId);
+
         // Find the resume: use specific resumeId if provided, otherwise find the latest one
         let resume: any = null;
         if (resumeId && resumeId !== 'all') {
-            resume = await this.prisma.resume.findUnique({
-                where: { id: resumeId },
+            // Scope by owner to prevent IDOR — only return the resume if it belongs to the current user
+            resume = await this.prisma.resume.findFirst({
+                where: { id: resumeId, ...(userId ? { profile: { userId } } : {}) },
             });
         } else {
-            // Fallback: find the latest resume (any type)
+            // Fallback: find the latest resume for this user
             resume = await this.prisma.resume.findFirst({
+                where: userId ? { profile: { userId } } : undefined,
                 orderBy: { updatedAt: 'desc' },
             });
         }
@@ -658,7 +755,9 @@ export class VacanciesService {
         // Get profile skills for gap analysis
         let profileSkills: string[] = [];
         try {
-            const profile = await this.prisma.profile.findFirst();
+            const profile = await this.prisma.profile.findFirst(
+                userId ? { where: { userId } } : undefined,
+            );
             if (profile && Array.isArray(profile.skills)) profileSkills = profile.skills as string[];
         } catch { /* ignore */ }
 
@@ -670,13 +769,17 @@ export class VacanciesService {
         for (const vs of vSet) if (!pSet.has(vs)) missingSkills.push(vs);
 
         // Call the AI service with enriched context
-        return this.aiService.evaluateVacancyInDepth(vacancy, resume.content, archetype, missingSkills.slice(0, 8));
+        const result = await this.aiService.evaluateVacancyInDepth(vacancy, resume.content, archetype, missingSkills.slice(0, 8));
+        if (userId) void this.quota.commitAiCall(userId);
+        return result;
     }
 
     /**
      * Generate STAR+R interview preparation for a specific vacancy
      */
-    async interviewPrep(id: string, resumeId?: string) {
+    async interviewPrep(id: string, resumeId?: string, userId?: string) {
+        if (userId) await this.quota.assertAiCall(userId);
+
         // Find the vacancy safely
         let vacancy: any = null;
         try {
@@ -692,22 +795,32 @@ export class VacanciesService {
         // Find the resume
         let resume: any = null;
         if (resumeId && resumeId !== 'all') {
-            resume = await this.prisma.resume.findUnique({ where: { id: resumeId } });
+            // Scope by owner to prevent IDOR
+            resume = await this.prisma.resume.findFirst({
+                where: { id: resumeId, ...(userId ? { profile: { userId } } : {}) },
+            });
         } else {
-            resume = await this.prisma.resume.findFirst({ orderBy: { updatedAt: 'desc' } });
+            resume = await this.prisma.resume.findFirst({
+                where: userId ? { profile: { userId } } : undefined,
+                orderBy: { updatedAt: 'desc' },
+            });
         }
 
         if (!resume) {
             return { noResume: true };
         }
 
-        return this.aiService.generateInterviewPrep(vacancy, resume.content);
+        const prep = await this.questionGenService.generateForVacancy(vacancy, resume.content);
+        if (userId) void this.quota.commitAiCall(userId);
+        return prep;
     }
 
     /**
      * Generate AI cover letter for a vacancy based on user's resume
      */
-    async generateCoverLetter(id: string, resumeId?: string, language: 'ru' | 'en' = 'ru'): Promise<{ coverLetter: string } | { noResume: true }> {
+    async generateCoverLetter(id: string, resumeId?: string, language: 'ru' | 'en' = 'ru', userId?: string): Promise<{ coverLetter: string } | { noResume: true }> {
+        if (userId) await this.quota.assertAiCall(userId);
+
         // Find the vacancy safely
         let vacancy: any = null;
         try {
@@ -723,16 +836,23 @@ export class VacanciesService {
         // Find the resume
         let resume: any = null;
         if (resumeId && resumeId !== 'all') {
-            resume = await this.prisma.resume.findUnique({ where: { id: resumeId } });
+            // Scope by owner to prevent IDOR
+            resume = await this.prisma.resume.findFirst({
+                where: { id: resumeId, ...(userId ? { profile: { userId } } : {}) },
+            });
         } else {
-            resume = await this.prisma.resume.findFirst({ orderBy: { updatedAt: 'desc' } });
+            resume = await this.prisma.resume.findFirst({
+                where: userId ? { profile: { userId } } : undefined,
+                orderBy: { updatedAt: 'desc' },
+            });
         }
 
         if (!resume) {
             return { noResume: true };
         }
 
-        return this.aiService.generateCoverLetter(vacancy, resume.content, language);
+        const letter = await this.aiService.generateCoverLetter(vacancy, resume.content, language);
+        if (userId) void this.quota.commitAiCall(userId);
+        return letter;
     }
 }
-

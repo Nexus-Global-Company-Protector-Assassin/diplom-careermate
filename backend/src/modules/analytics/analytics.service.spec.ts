@@ -14,7 +14,7 @@ describe('AnalyticsService', () => {
                     useValue: {
                         vacancy: { count: jest.fn().mockResolvedValue(0) },
                         interview: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
-                        vacancyResponse: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+                        favoriteVacancy: { count: jest.fn().mockResolvedValue(0) },
                         resume: { count: jest.fn().mockResolvedValue(0) },
                         profile: { findFirst: jest.fn().mockResolvedValue(null) },
                     },
@@ -30,7 +30,7 @@ describe('AnalyticsService', () => {
     });
 
     it('should return weekly report with 4 items', async () => {
-        const result = await service.getWeeklyReport();
+        const result = await service.getWeeklyReport('user-uuid-1');
         expect(Array.isArray(result)).toBe(true);
         expect(result.length).toBe(4);
         expect(result[0]).toHaveProperty('icon');

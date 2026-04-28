@@ -22,14 +22,12 @@ import {
   ExternalLink,
   FileText,
   Mic,
-  Copy,
-  Languages,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/shared/ui/dialog"
 import { Label } from "@/shared/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select"
 import { Checkbox } from "@/shared/ui/checkbox"
-import { useRecommendedVacancies, useApplyToVacancy, useToggleFavorite, useAdzunaVacancies, useAdzunaParse, useEvaluateVacancy, useInterviewPrep, useGenerateCoverLetter, Vacancy, VacancySearchFilters } from "./api/use-vacancies"
+import { useRecommendedVacancies, useFavorites, useToggleFavorite, useAdzunaVacancies, useAdzunaParse, useEvaluateVacancy, useInterviewPrep, useTrackInteraction, Vacancy, VacancySearchFilters } from "./api/use-vacancies"
 import { useResumesHistory } from "@/features/resume/api/use-resumes"
 import { useProfile } from "@/features/profile/api/use-profile"
 
@@ -53,6 +51,7 @@ interface Job {
   archetype?: string
   matchedSkills?: string[]
   missingSkills?: string[]
+  matchReasons?: string[]
   freshnessScore?: number | null
   freshnessLabel?: string | null
   daysOld?: number | null
@@ -85,26 +84,20 @@ export function VacanciesContent() {
     pSkillsFlat,
     pSalary !== null ? pSalary : undefined
   )
-  const { mutate: applyToJob } = useApplyToVacancy()
-  const { mutate: toggleFavApi } = useToggleFavorite()
+  const { data: favoritesData } = useFavorites()
+  const { mutate: toggleFavMutate } = useToggleFavorite()
+  const { mutate: trackInteraction } = useTrackInteraction()
+
+  const favorites: string[] = favoritesData ?? []
 
   const [jobs, setJobs] = useState<Job[]>([])
-  const [favorites, setFavorites] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [activeSearchQuery, setActiveSearchQuery] = useState("")
   const [searchError, setSearchError] = useState<string | null>(null)
   const [filterModalOpen, setFilterModalOpen] = useState(false)
-  const [applyModalOpen, setApplyModalOpen] = useState(false)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
-  const [appliedJobs, setAppliedJobs] = useState<string[]>([])
+  const [dismissedJobs, setDismissedJobs] = useState<Set<string>>(new Set())
   const [selectedResumeId, setSelectedResumeId] = useState<string>("")
-
-  // Cover letter states
-  const [coverLetter, setCoverLetter] = useState<string>("")
-  const [coverLetterLanguage, setCoverLetterLanguage] = useState<'ru' | 'en'>('ru')
-  const [coverLetterCopied, setCoverLetterCopied] = useState(false)
-  const [coverLetterNoResume, setCoverLetterNoResume] = useState(false)
-  const { mutateAsync: generateCoverLetter, isPending: isGeneratingLetter } = useGenerateCoverLetter()
 
   // Analysis Modal States
   const [analysisModalOpen, setAnalysisModalOpen] = useState(false)
@@ -318,6 +311,7 @@ export function VacanciesContent() {
           archetype: v.archetype,
           matchedSkills: v.matchedSkills,
           missingSkills: v.missingSkills,
+          matchReasons: (v as any).matchReasons,
           freshnessScore: v.freshnessScore,
           freshnessLabel: v.freshnessLabel,
           daysOld: v.daysOld,
@@ -341,74 +335,16 @@ export function VacanciesContent() {
   }
 
   const toggleFavorite = (id: string) => {
-    const isFav = !favorites.includes(id)
-    setFavorites((prev) => (isFav ? [...prev, id] : prev.filter((f) => f !== id)))
-    toggleFavApi({ vacancyId: id, isFavorite: isFav })
+    toggleFavMutate(id)
   }
 
-  const handleApply = async (job: Job) => {
-    setSelectedJob(job)
-    setCoverLetter("")
-    setCoverLetterNoResume(false)
-    setCoverLetterCopied(false)
-    setApplyModalOpen(true)
-    try {
-      const res = await generateCoverLetter({
-        vacancyId: job.id,
-        resumeId: selectedResumeId || undefined,
-        language: coverLetterLanguage,
-      })
-      if ('noResume' in res) {
-        setCoverLetterNoResume(true)
-      } else {
-        setCoverLetter(res.coverLetter)
-      }
-    } catch (e) {
-      console.error('Cover letter generation failed', e)
-      // Fallback: empty textarea for manual input
-    }
-  }
-
-  const handleRegenerateLetter = async () => {
-    if (!selectedJob) return
-    setCoverLetter("")
-    setCoverLetterNoResume(false)
-    setCoverLetterCopied(false)
-    try {
-      const res = await generateCoverLetter({
-        vacancyId: selectedJob.id,
-        resumeId: selectedResumeId || undefined,
-        language: coverLetterLanguage,
-      })
-      if ('noResume' in res) {
-        setCoverLetterNoResume(true)
-      } else {
-        setCoverLetter(res.coverLetter)
-      }
-    } catch (e) {
-      console.error('Cover letter generation failed', e)
-    }
-  }
-
-  const handleCopyLetter = () => {
-    if (coverLetter) {
-      navigator.clipboard.writeText(coverLetter)
-      setCoverLetterCopied(true)
-      setTimeout(() => setCoverLetterCopied(false), 2000)
-    }
-  }
-
-  const confirmApply = () => {
-    if (selectedJob) {
-      applyToJob({ vacancyId: selectedJob.id, coverLetter: coverLetter || undefined })
-      setAppliedJobs((prev) => [...prev, selectedJob.id])
-      setApplyModalOpen(false)
-      setSelectedJob(null)
-      setCoverLetter("")
-    }
+  const handleDismiss = (id: string) => {
+    setDismissedJobs(prev => new Set([...prev, id]))
+    trackInteraction({ vacancyId: id, type: 'dismiss' })
   }
 
   const handleAnalyze = async (job: Job) => {
+    trackInteraction({ vacancyId: job.id, type: 'analyze' })
     setAnalyzingJob(job)
     setAnalysisResult(null)
     setAnalysisModalOpen(true)
@@ -421,6 +357,7 @@ export function VacanciesContent() {
   }
 
   const handleInterviewPrep = async (job: Job) => {
+    trackInteraction({ vacancyId: job.id, type: 'click' })
     setInterviewJob(job)
     setInterviewResult(null)
     setInterviewModalOpen(true)
@@ -447,9 +384,11 @@ export function VacanciesContent() {
 
   const filteredJobs = jobs.filter(
     (job) =>
-      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.skills.some((skill) => skill.toLowerCase().includes(searchQuery.toLowerCase())),
+      !dismissedJobs.has(job.id) && (
+        job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.skills.some((skill) => skill.toLowerCase().includes(searchQuery.toLowerCase()))
+      ),
   )
 
   return (
@@ -519,10 +458,10 @@ export function VacanciesContent() {
             positive: jobs.length > 0,
           },
           {
-            value: String(appliedJobs.length),
-            label: "Ваши отклики",
-            change: appliedJobs.length > 0 ? `${appliedJobs.length} отправлено` : "Вы пока не откликались",
-            positive: appliedJobs.length > 0,
+            value: String(favorites.length),
+            label: "В избранном",
+            change: favorites.length > 0 ? `${favorites.length} сохранено` : "Сохраните интересные вакансии",
+            positive: favorites.length > 0,
           },
           {
             value: jobs.length > 0
@@ -545,30 +484,6 @@ export function VacanciesContent() {
           </Card>
         ))}
       </div>
-
-      {/* Favorites Section */}
-      {favorites.length > 0 && (
-        <Card className="bg-card border-border">
-          <CardContent className="p-4">
-            <h2 className="text-lg font-semibold mb-3 text-card-foreground flex items-center gap-2">
-              <Heart className="h-5 w-5 text-red-500 fill-red-500" />
-              Избранные вакансии ({favorites.length})
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              {jobs
-                .filter((job) => favorites.includes(job.id))
-                .map((job) => (
-                  <Badge key={job.id} variant="secondary" className="px-3 py-1.5 gap-2">
-                    {job.title} • {job.company}
-                    <button onClick={() => toggleFavorite(job.id)}>
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Recommended Jobs */}
       <div>
@@ -658,6 +573,25 @@ export function VacanciesContent() {
                         )}
                       </div>
                       <p className="font-semibold mt-2 text-card-foreground">{job.salary}</p>
+                      {job.matchReasons && job.matchReasons.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {job.matchReasons.map((reason, ri) => {
+                            const isNegative = reason.startsWith('Нет в профиле') || reason.startsWith('Должность не')
+                            return (
+                              <span
+                                key={ri}
+                                className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
+                                  isNegative
+                                    ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                                    : 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                }`}
+                              >
+                                {isNegative ? '✗' : '✓'} {reason}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
                       {job.url && (
                         <a
                           href={job.url}
@@ -670,23 +604,18 @@ export function VacanciesContent() {
                       )}
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
+                  <div className="flex flex-col items-end gap-2 shrink-0">
                     <Badge className={job.matchColor}>{job.match} match</Badge>
+                    <button
+                      onClick={() => handleDismiss(job.id)}
+                      title="Не интересует"
+                      className="text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
+                    >
+                      <X className="h-3 w-3" /> Не интересует
+                    </button>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 sm:gap-3 mt-4">
-                  {appliedJobs.includes(job.id) ? (
-                    <Button disabled className="flex-1 sm:flex-none bg-green-500 text-white">
-                      <Check className="h-4 w-4 mr-2" /> Отклик отправлен
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={() => handleApply(job)}
-                      className="flex-1 sm:flex-none bg-green-500 hover:bg-green-600"
-                    >
-                      Откликнуться
-                    </Button>
-                  )}
                   <Button
                     variant="outline"
                     className="flex-1 sm:flex-none text-purple-600 border-purple-200 hover:bg-purple-50 dark:text-purple-400 dark:border-purple-800 dark:hover:bg-purple-900/30"
@@ -718,42 +647,6 @@ export function VacanciesContent() {
           ))}
         </div>
       </div>
-
-      {/* Jobs Table — Applied Jobs */}
-      {appliedJobs.length > 0 && (
-        <Card className="bg-card border-border">
-          <CardContent className="p-0 overflow-x-auto">
-            <table className="w-full min-w-[500px]">
-              <thead>
-                <tr className="border-b border-border text-left text-sm text-muted-foreground">
-                  <th className="p-4 font-medium">Вакансия</th>
-                  <th className="p-4 font-medium">Компания</th>
-                  <th className="p-4 font-medium">Совпадение</th>
-                  <th className="p-4 font-medium">Статус</th>
-                  <th className="p-4 font-medium">Ответ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {appliedJobs.map((jobId) => {
-                  const job = jobs.find((j) => j.id === jobId)
-                  if (!job) return null
-                  return (
-                    <tr key={jobId} className="border-b border-border last:border-0">
-                      <td className="p-4 text-card-foreground">{job.title}</td>
-                      <td className="p-4 text-card-foreground">{job.company}</td>
-                      <td className="p-4"><Badge className={job.matchColor}>{job.match}</Badge></td>
-                      <td className="p-4">
-                        <Badge className="bg-blue-500 text-white">Отправлено</Badge>
-                      </td>
-                      <td className="p-4 text-muted-foreground">—</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Filter Modal */}
       <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>
@@ -825,140 +718,6 @@ export function VacanciesContent() {
             </Button>
             <Button onClick={applyFilters} className="bg-blue-600 hover:bg-blue-700">
               Применить
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Apply Modal — AI Cover Letter */}
-      <Dialog open={applyModalOpen} onOpenChange={setApplyModalOpen}>
-        <DialogContent className="sm:max-w-[560px] bg-card border-border">
-          <DialogHeader>
-            <DialogTitle className="text-card-foreground flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-green-500" />
-              Отклик на вакансию
-            </DialogTitle>
-          </DialogHeader>
-
-          {selectedJob && (
-            <div className="py-2 space-y-4">
-              {/* Job info */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-lg font-bold text-white shrink-0">
-                  {selectedJob.logo}
-                </div>
-                <div className="min-w-0">
-                  <h4 className="font-semibold text-card-foreground truncate">{selectedJob.title}</h4>
-                  <p className="text-xs text-muted-foreground">{selectedJob.company}</p>
-                </div>
-              </div>
-
-              {/* Language toggle + Regenerate */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Languages className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Язык письма:</span>
-                  <div className="flex rounded-md border border-border overflow-hidden text-sm">
-                    <button
-                      onClick={() => setCoverLetterLanguage('ru')}
-                      className={`px-3 py-1 transition-colors ${
-                        coverLetterLanguage === 'ru'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-card text-muted-foreground hover:bg-muted'
-                      }`}
-                    >
-                      RU
-                    </button>
-                    <button
-                      onClick={() => setCoverLetterLanguage('en')}
-                      className={`px-3 py-1 transition-colors ${
-                        coverLetterLanguage === 'en'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-card text-muted-foreground hover:bg-muted'
-                      }`}
-                    >
-                      EN
-                    </button>
-                  </div>
-                </div>
-                {!isGeneratingLetter && !coverLetterNoResume && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRegenerateLetter}
-                    className="gap-1.5 text-xs bg-transparent border-border"
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    Перегенерировать
-                  </Button>
-                )}
-              </div>
-
-              {/* Content area */}
-              {isGeneratingLetter ? (
-                <div className="flex flex-col items-center justify-center py-10 space-y-3">
-                  <Loader2 className="h-8 w-8 animate-spin text-green-500" />
-                  <p className="text-sm text-muted-foreground animate-pulse text-center">
-                    ✨ Генерируем персонализированное письмо...<br />
-                    <span className="text-xs">Анализируем вакансию и ваше резюме</span>
-                  </p>
-                </div>
-              ) : coverLetterNoResume ? (
-                <div className="flex flex-col items-center justify-center py-8 space-y-3">
-                  <FileText className="h-10 w-10 text-muted-foreground" />
-                  <h3 className="text-base font-semibold text-foreground">Резюме не найдено</h3>
-                  <p className="text-sm text-muted-foreground text-center max-w-xs">
-                    Для генерации письма нужно сначала создать резюме на основе вашего профиля.
-                  </p>
-                  <Button
-                    className="bg-blue-600 hover:bg-blue-700 gap-2 text-sm"
-                    onClick={() => { setApplyModalOpen(false); router.push('/resume'); }}
-                  >
-                    <FileText className="h-4 w-4" /> Создать резюме
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-card-foreground text-sm">Сопроводительное письмо</Label>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCopyLetter}
-                      className="h-7 px-2 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                      disabled={!coverLetter}
-                    >
-                      {coverLetterCopied
-                        ? <><Check className="h-3 w-3 text-green-500" /> Скопировано</>  
-                        : <><Copy className="h-3 w-3" /> Копировать</>
-                      }
-                    </Button>
-                  </div>
-                  <textarea
-                    value={coverLetter}
-                    onChange={(e) => setCoverLetter(e.target.value)}
-                    className="w-full min-h-[200px] rounded-lg border border-border bg-background p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed"
-                    placeholder={coverLetter ? '' : 'Напишите сопроводительное письмо вручную...'}
-                  />
-                  {coverLetter && (
-                    <p className="text-xs text-muted-foreground text-right">{coverLetter.length} символов</p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setApplyModalOpen(false)} className="bg-transparent border-border">
-              Отмена
-            </Button>
-            <Button
-              onClick={confirmApply}
-              className="bg-green-500 hover:bg-green-600 gap-2"
-              disabled={isGeneratingLetter || coverLetterNoResume}
-            >
-              <Check className="h-4 w-4" />
-              Отправить отклик
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1081,9 +840,6 @@ export function VacanciesContent() {
 
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setAnalysisModalOpen(false)}>Закрыть</Button>
-            {analysisResult && (
-              <Button onClick={() => { setAnalysisModalOpen(false); if (analyzingJob) handleApply(analyzingJob); }} className="bg-green-500 hover:bg-green-600">Откликнуться</Button>
-            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -70,7 +70,7 @@ ${profileContext}
                     },
                 ],
                 ProfileAnalysisSchema,
-                { temperature: 0.3 },
+                { model: this.llmGateway.getModels().fast, temperature: 0.3 },
             );
 
             this.logger.log(

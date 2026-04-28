@@ -20,6 +20,22 @@ import { SearchCommand } from "@/widgets/header/search-command"
 import { InterviewPrep } from "@/features/interview/interview-prep"
 import { CoverLetterGenerator } from "@/features/resume/cover-letter-generator"
 import { KeyboardShortcuts } from "@/features/help/keyboard-shortcuts"
+import { useLogout } from "@/features/auth/api/use-auth"
+import { useProfile } from "@/features/profile/api/use-profile"
+import { getAccessToken } from "@/shared/lib/auth"
+
+function getInitials(name?: string | null): string {
+  if (!name) return "?"
+  return name.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join("")
+}
+
+function getEmailFromToken(): string {
+  try {
+    const token = getAccessToken()
+    if (!token) return ""
+    return JSON.parse(atob(token.split(".")[1])).email ?? ""
+  } catch { return "" }
+}
 
 const notifications = [
   {
@@ -54,6 +70,11 @@ const notifications = [
 
 export function Header() {
   const { toggleMobile } = useSidebar()
+  const logout = useLogout()
+  const { data: profile } = useProfile()
+  const displayName = profile?.fullName || "Пользователь"
+  const displayEmail = getEmailFromToken()
+  const initials = getInitials(profile?.fullName)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationsList, setNotificationsList] = useState(notifications)
   const [interviewPrepOpen, setInterviewPrepOpen] = useState(false)
@@ -181,9 +202,9 @@ export function Header() {
                 variant="ghost"
                 className="relative h-10 w-10 rounded-full p-0 hover:ring-2 hover:ring-blue-500/20"
               >
-                <Avatar className="h-9 w-9 bg-gradient-to-br from-emerald-400 to-emerald-600">
-                  <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-emerald-600 text-white text-sm font-medium">
-                    СБ
+                <Avatar className="h-9 w-9 bg-gradient-to-br from-indigo-500 to-violet-600">
+                  <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-violet-600 text-white text-sm font-medium">
+                    {initials}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -191,8 +212,8 @@ export function Header() {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium text-foreground">Сергей Баранов</p>
-                  <p className="text-xs text-muted-foreground">oldersik@gmail.ru</p>
+                  <p className="text-sm font-medium text-foreground">{displayName}</p>
+                  <p className="text-xs text-muted-foreground">{displayEmail}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -215,7 +236,7 @@ export function Header() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600 focus:text-red-600 cursor-pointer">
+              <DropdownMenuItem onClick={() => logout.mutate()} className="text-red-600 focus:text-red-600 cursor-pointer">
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Выйти</span>
               </DropdownMenuItem>

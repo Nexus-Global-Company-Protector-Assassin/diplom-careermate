@@ -1,24 +1,28 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { AiService } from '../ai/ai.service';
+import { QuotaService } from '../quota/quota.service';
 
 @Injectable()
 export class ResumesService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly storage: StorageService,
+        private readonly aiService: AiService,
+        private readonly quota: QuotaService,
     ) {}
 
-    private async getProfileId() {
-        const profile = await this.prisma.profile.findFirst();
+    private async getProfileIdForUser(userId: string): Promise<string> {
+        const profile = await this.prisma.profile.findFirst({ where: { userId } });
         if (!profile) {
-            throw new NotFoundException('Должен существовать хотя бы один профиль (demo user)');
+            throw new NotFoundException('Профиль не найден');
         }
         return profile.id;
     }
 
-    async getHistory() {
-        const profileId = await this.getProfileId();
+    async getHistory(userId: string) {
+        const profileId = await this.getProfileIdForUser(userId);
 
         const resumes = await this.prisma.resume.findMany({
             where: { profileId },
@@ -58,49 +62,54 @@ export class ResumesService {
         return { resumes: mappedResumes, history: mappedHistory };
     }
 
-    async generateCoverLetter(company: string, position: string, keyPoints?: string, profile?: any) {
-        const name = profile?.fullName || "Пользователь";
-        const email = profile?.aboutMe?.match(/Email:\s*(.*)/)?.[1] || "user@example.com";
-        const phone = profile?.phone || "+7 (000) 000-00-00";
+    async generateCoverLetter(company: string, position: string, keyPoints?: string, profile?: any, userId?: string) {
+        const vacancy = {
+            title: position,
+            employer: company,
+            descriptionPreview: keyPoints || '',
+            skills: [],
+            salaryLabel: '',
+            schedule: '',
+            location: '',
+        };
 
-        const text = `Уважаемый HR-менеджер компании ${company}!
+        const resumeContent = profile
+            ? [
+                profile.fullName ? `Имя: ${profile.fullName}` : '',
+                profile.desiredPosition ? `Желаемая позиция: ${profile.desiredPosition}` : '',
+                profile.aboutMe ? `О себе: ${profile.aboutMe}` : '',
+                profile.skills?.length ? `Навыки: ${Array.isArray(profile.skills) ? profile.skills.join(', ') : profile.skills}` : '',
+                keyPoints ? `Ключевые моменты: ${keyPoints}` : '',
+            ].filter(Boolean).join('\n')
+            : `Кандидат на позицию ${position}${keyPoints ? `\nКлючевые моменты: ${keyPoints}` : ''}`;
 
-Я с большим интересом ознакомился с вакансией "${position}" и хотел бы предложить свою кандидатуру на данную позицию.
-
-Имея глубокий опыт и релевантные навыки, я уверен, что смогу внести значительный вклад в развитие вашей команды.
-
-Мои ключевые компетенции отлично совпадают с вашими требованиями.
-
-${keyPoints ? `\nДополнительно хочу отметить: ${keyPoints}\n` : ""}
-Буду рад возможности обсудить, как мой опыт может быть полезен для ${company}. Готов предоставить дополнительную информацию и ответить на любые вопросы.
-
-(Сгенерировано бэкендом)
-
-С уважением,
-${name}
-${email} | ${phone}`;
+        if (userId) await this.quota.assertAiCall(userId);
+        const { coverLetter } = await this.aiService.generateCoverLetter(vacancy, resumeContent, 'ru');
+        if (userId) void this.quota.commitAiCall(userId);
 
         try {
-            const profileId = await this.getProfileId();
+            const profileId = userId ? await this.getProfileIdForUser(userId) : null;
+            if (!profileId) return coverLetter;
             await this.prisma.resume.create({
                 data: {
                     profileId,
                     title: `Сопроводительное: ${company}`,
                     subtitle: `Позиция: ${position}`,
-                    content: text,
+                    content: coverLetter,
                     type: 'cover_letter',
-                    status: 'draft'
-                }
+                    status: 'draft',
+                },
             });
-        } catch (e) {
+        } catch {
             // ignore if no profile
         }
 
-        return text;
+        return coverLetter;
     }
 
-    async saveResume(title: string, subtitle?: string, content?: string, type: string = 'resume', reviewData?: any) {
-        const profileId = await this.getProfileId();
+    async saveResume(title: string, subtitle?: string, content?: string, type: string = 'resume', reviewData?: any, userId?: string) {
+        if (userId && type !== 'cover_letter') await this.quota.assertResumeLimit(userId);
+        const profileId = await this.getProfileIdForUser(userId!);
         return this.prisma.resume.create({
             data: {
                 profileId,
@@ -114,8 +123,9 @@ ${email} | ${phone}`;
         });
     }
 
-    async uploadResumeFile(file: Express.Multer.File, title: string) {
-        const profileId = await this.getProfileId();
+    async uploadResumeFile(file: Express.Multer.File, title: string, userId?: string) {
+        if (userId) await this.quota.assertResumeLimit(userId);
+        const profileId = await this.getProfileIdForUser(userId!);
         const ext = file.originalname.split('.').pop() || 'pdf';
         const key = `resumes/${profileId}/${crypto.randomUUID()}.${ext}`;
 
@@ -134,8 +144,8 @@ ${email} | ${phone}`;
         });
     }
 
-    async getDownloadUrl(resumeId: string): Promise<string> {
-        const profileId = await this.getProfileId();
+    async getDownloadUrl(resumeId: string, userId?: string): Promise<string> {
+        const profileId = await this.getProfileIdForUser(userId!);
         const resume = await this.prisma.resume.findFirst({
             where: { id: resumeId, profileId },
         });
@@ -151,8 +161,8 @@ ${email} | ${phone}`;
         return this.storage.getPresignedDownloadUrl(resume.fileKey);
     }
 
-    async deleteResume(id: string) {
-        const profileId = await this.getProfileId();
+    async deleteResume(id: string, userId?: string) {
+        const profileId = await this.getProfileIdForUser(userId!);
         await this.prisma.resume.deleteMany({ where: { id, profileId } });
         return { success: true };
     }

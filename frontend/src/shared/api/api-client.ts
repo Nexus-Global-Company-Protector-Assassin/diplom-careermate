@@ -27,14 +27,15 @@ class ApiClient {
 
     if (!response.ok) {
       let errorMessage = response.statusText || 'Ошибка запроса';
+      let errorBody: Record<string, unknown> | undefined;
       try {
-        const errorData = await response.json();
-        if (typeof errorData.message === 'string') errorMessage = errorData.message;
-        else if (Array.isArray(errorData.message)) errorMessage = errorData.message[0];
+        errorBody = await response.json();
+        if (errorBody && typeof errorBody.message === 'string') errorMessage = errorBody.message;
+        else if (errorBody && Array.isArray(errorBody.message)) errorMessage = (errorBody.message as string[])[0];
       } catch {
         // keep statusText
       }
-      throw classifyError(response.status, errorMessage);
+      throw classifyError(response.status, errorMessage, errorBody);
     }
 
     try {

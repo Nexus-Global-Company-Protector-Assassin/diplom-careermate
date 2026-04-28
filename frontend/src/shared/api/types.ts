@@ -43,12 +43,15 @@ export interface PocRunResponseDto {
 // Parsed profile returned by the ML Agent after uploading a PDF/DOCX
 export interface ParsedProfileDto {
     fullName: string;
+    phone?: string;
+    location?: string;
     desiredPosition?: string;
     experienceYears?: number;
     skills?: string[];
-    education?: any[];
-    workExperience?: any[];
+    education?: Array<{ institution: string; field?: string; degree?: string; endYear?: number }>;
+    workExperience?: Array<{ company: string; position: string; duration: string; description?: string }>;
     aboutMe?: string;
+    careerGoals?: string;
 }
 
 // AI ReAct Chat types
@@ -60,3 +63,8 @@ export interface ChatMessage {
 export type ChatResponseDto =
     | { type: 'result'; data: any; message: string }
     | { type: 'questions'; data: string[]; message: string };
+
+export interface AuthResponseDto {
+    access_token: string;
+    refresh_token: string;
+}

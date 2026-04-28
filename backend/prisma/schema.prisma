@@ -42,19 +42,25 @@ model Profile {
   workExperience      Json?
   skills              Json?
   languages           Json?
-  aboutMe             String?
-  careerGoals         String?
+  aboutMe                   String?
+  careerGoals               String?
+  workFormatPreference      String?   // "remote" | "hybrid" | "onsite"
+  companyTypePreference     String?   // "startup" | "scaleup" | "enterprise" | "agency" | "product"
+  managementStylePreference String?   // "flat" | "structured" | "autonomous" | "mentorship"
   linkedinUrl         String?
   githubUrl           String?
   portfolioUrl        String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  analysisResults     AnalysisResult[]
-  resumes             Resume[]
-  interviews          Interview[]
-  vacancyResponses    VacancyResponse[]
-  profileSkills       ProfileSkill[]
+  analysisResults       AnalysisResult[]
+  resumes               Resume[]
+  interviews            Interview[]
+  vacancyResponses      VacancyResponse[]
+  profileSkills         ProfileSkill[]
+  vacancyInteractions   VacancyInteraction[]
+  careerAssessments     CareerAssessment[]
+  favoriteVacancies     FavoriteVacancy[]
 }
 
 model AnalysisResult {
@@ -124,12 +130,42 @@ model Vacancy {
   experience         String?
   schedule           String?
   url                String?  // Ссылка на оригинальную вакансию
-  searchQuery        String   // Поисковый запрос, по которому найдена вакансия
+  searchQuery        String   // Поисковый запрос, по которому найдена вакансию на площадке
   publishedAt        DateTime? // Дата публикации вакансии на площадке
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   vacancySkills      VacancySkill[]
+  interactions       VacancyInteraction[]
+  favorites          FavoriteVacancy[]
+}
+
+model FavoriteVacancy {
+  profileId String
+  vacancyId String
+  createdAt DateTime @default(now())
+
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  vacancy   Vacancy  @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, vacancyId])
+  @@index([profileId])
+}
+
+// Behavioral signals — tracks candidate interactions with vacancies
+model VacancyInteraction {
+  id          String   @id @default(uuid())
+  profileId   String
+  vacancyId   String
+  // click | apply | favorite | analyze | dismiss
+  type        String
+  createdAt   DateTime @default(now())
+
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  vacancy     Vacancy  @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, vacancyId, type])
+  @@index([profileId, type])
 }
 
 // ---------------------------------------------------------------------------
@@ -167,4 +203,46 @@ model VacancySkill {
   skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@id([vacancyId, skillId])
+}
+
+model RecommendationImpression {
+  id           String   @id @default(uuid())
+  profileId    String
+  vacancyId    String
+  position     Int
+  score        Float
+  modelVersion String   @default("rule-based-v1")
+  createdAt    DateTime @default(now())
+
+  @@index([profileId, createdAt])
+}
+
+// Career assessment quiz results
+model CareerAssessment {
+  id              String   @id @default(uuid())
+  profileId       String
+  profile         Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  domain          String   // 'it' | 'finance' | 'marketing' | 'management' | 'creative' | 'other'
+  answers         Json     // Array of { questionId, optionIndex }
+  dimensionScores Json     // { analytical, technical, social, creative, leadership, structured }
+  result          Json     // AI-generated result (personalitySummary, dominantTraits, topPaths[])
+  createdAt       DateTime @default(now())
+
+  @@index([profileId, createdAt])
+}
+
+// Tracks trained ML model versions and their evaluation metrics
+model MLModelVersion {
+  id           String   @id @default(uuid())
+  version      String   @unique  // "stub-v0", "lgbm-v1"
+  algorithm    String            // "stub", "lgbm", "logreg"
+  trainedAt    DateTime
+  precision10  Float?            // precision@10
+  ndcg10       Float?            // NDCG@10
+  auc          Float?
+  isActive     Boolean  @default(false)
+  artefactPath String?           // path to serialized model file
+  trainSamples Int?              // number of training samples used
+  notes        String?
+  createdAt    DateTime @default(now())
 }

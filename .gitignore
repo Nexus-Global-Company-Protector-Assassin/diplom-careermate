@@ -155,11 +155,23 @@ backups/
 *.sql.gz
 *.tar.gz
 *-backup-*
+!backend/prisma/migrations/**/migration.sql
 
 # ==========================================
 # Claude AI
 # ==========================================
 .claude/
+
+# ==========================================
+# Agent Skills (Claude Code / npx skills — local only, not committed)
+# ==========================================
+.agents/
+.factory/
+.qoder/
+.windsurf/
+skills/
+SKILL.md
+skills-lock.json
 
 # ==========================================
 # DevOps & Infrastructure

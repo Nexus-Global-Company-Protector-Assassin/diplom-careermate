@@ -118,10 +118,67 @@ services:
     networks:
       - careermate-network
 
+  # Neo4j Knowledge Graph (Skills KG with vector index)
+  neo4j:
+    image: neo4j:5.18.0-community
+    container_name: careermate-neo4j
+    restart: always
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-careermate_neo4j}
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      start_period: 60s
+      retries: 10
+    networks:
+      - careermate-network
+
+  # ML Ranking Service (FastAPI + LightGBM stub)
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: careermate-ml
+    restart: always
+    ports:
+      - "${ML_SERVICE_PORT:-3003}:3003"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/careermate}
+      ML_SERVICE_PORT: 3003
+      SHADOW_MODE: ${ML_SHADOW_MODE:-true}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-careermate_neo4j}
+    volumes:
+      - ml_models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3003/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    networks:
+      - careermate-network
+
 volumes:
   postgres_data:
   redis_data:
   minio_data:
+  ml_models:
+  neo4j_data:
 
 networks:
   careermate-network:

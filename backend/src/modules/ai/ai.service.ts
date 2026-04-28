@@ -1,11 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { LlmProviderService } from './providers/llm-provider.service';
 import { CareerChatChain } from './langchain/career-chat.chain';
 import { VacancyAnalysisChain } from './langchain/vacancy-analysis.chain';
 import { InterviewPrepChain } from './langchain/interview-prep.chain';
 import { CoverLetterChain } from './langchain/cover-letter.chain';
+import { CareerPathChain } from './langchain/career-path.chain';
+
+const AI_CACHE_TTL = 24 * 60 * 60;
 
 @Injectable()
 export class AiService {
@@ -15,10 +20,34 @@ export class AiService {
         private readonly configService: ConfigService,
         private readonly prisma: PrismaService,
         private readonly llmProvider: LlmProviderService,
+        private readonly redis: RedisService,
     ) {}
 
-    async generateResponse(message: string): Promise<string> {
-        const llm = this.llmProvider.chat;
+    private hash(data: unknown): string {
+        return crypto.createHash('md5').update(JSON.stringify(data)).digest('hex');
+    }
+
+    private async cacheWrap<T>(key: string, fn: () => Promise<T>): Promise<T> {
+        try {
+            const cached = await this.redis.get(key);
+            if (cached) {
+                this.logger.log(`[Cache HIT] ${key}`);
+                return JSON.parse(cached) as T;
+            }
+        } catch { /* Redis unavailable — fall through */ }
+
+        const result = await fn();
+
+        try {
+            await this.redis.set(key, JSON.stringify(result), AI_CACHE_TTL);
+            this.logger.log(`[Cache SET] ${key}`);
+        } catch { /* non-critical */ }
+
+        return result;
+    }
+
+    async generateResponse(message: string, userId?: string): Promise<string> {
+        const llm = this.llmProvider.fastChat ?? this.llmProvider.chat;
         if (!llm) {
             this.logger.warn('LLM_API_KEY is not set. Using mocked response.');
             return this.getMockResponse(message);
@@ -26,7 +55,9 @@ export class AiService {
 
         try {
             let context = '';
-            const profile = await this.prisma.profile.findFirst();
+            const profile = await this.prisma.profile.findFirst(
+                userId ? { where: { userId } } : undefined,
+            );
             if (profile) {
                 context = `Контекст пользователя: Меня зовут ${profile.fullName || 'Кандидат'}. Ищу работу на позицию: ${profile.desiredPosition || 'Разработчик'}. Обо мне: ${profile.aboutMe || ''}. Навыки: ${JSON.stringify(profile.skills) || ''}.`;
             }
@@ -53,6 +84,11 @@ export class AiService {
     }
 
     async evaluateVacancyInDepth(vacancy: any, resumeContent: string, archetype?: string, missingSkills?: string[]): Promise<any> {
+        const cacheKey = `ai:vacancy-eval:${this.hash({ vacancyId: vacancy?.id, resumeContent, archetype, missingSkills })}`;
+        return this.cacheWrap(cacheKey, () => this._evaluateVacancyInDepth(vacancy, resumeContent, archetype, missingSkills));
+    }
+
+    private async _evaluateVacancyInDepth(vacancy: any, resumeContent: string, archetype?: string, missingSkills?: string[]): Promise<any> {
         const daysOld = vacancy.createdAt
             ? Math.floor((Date.now() - new Date(vacancy.createdAt).getTime()) / 86400000)
             : null;
@@ -149,6 +185,11 @@ ${vacancyText}`;
     }
 
     async generateInterviewPrep(vacancy: any, resumeContent: string): Promise<any> {
+        const cacheKey = `ai:interview-prep:${this.hash({ vacancyId: vacancy?.id, resumeContent })}`;
+        return this.cacheWrap(cacheKey, () => this._generateInterviewPrep(vacancy, resumeContent));
+    }
+
+    private async _generateInterviewPrep(vacancy: any, resumeContent: string): Promise<any> {
         const llm = this.llmProvider.chat;
         const vacancyText = `Вакансия: ${vacancy?.title} в ${vacancy?.employer}. Описание: ${vacancy?.descriptionPreview || ''}. Навыки: ${JSON.stringify(vacancy?.skills || [])}. Опыт: ${vacancy?.experience}. Формат: ${vacancy?.schedule}.`;
 
@@ -196,7 +237,13 @@ ${vacancyText}
         }
     }
 
+
     async generateCoverLetter(vacancy: any, resumeContent: string, language: 'ru' | 'en' = 'ru'): Promise<{ coverLetter: string }> {
+        const cacheKey = `ai:cover-letter:${this.hash({ vacancyId: vacancy?.id, resumeContent, language })}`;
+        return this.cacheWrap(cacheKey, () => this._generateCoverLetter(vacancy, resumeContent, language));
+    }
+
+    private async _generateCoverLetter(vacancy: any, resumeContent: string, language: 'ru' | 'en' = 'ru'): Promise<{ coverLetter: string }> {
         const llm = this.llmProvider.chat;
         const isEn = language === 'en';
 
@@ -207,18 +254,78 @@ ${vacancyText}
         if (!llm) {
             this.logger.warn('LLM_API_KEY is not set. Using mocked cover letter.');
             const mockLetter = isEn
-                ? `Good day!\n\nI am excited to apply for the ${vacancy?.title} position at ${vacancy?.employer}. My experience and skills closely match the requirements.\n\n[Mock Mode — add LLM_API_KEY to .env for personalized generation]`
-                : `Добрый день!\n\nМеня заинтересовала вакансия ${vacancy?.title} в компании ${vacancy?.employer}. Мой опыт и навыки хорошо соответствуют описанным требованиям.\n\n[Mock Mode — добавьте LLM_API_KEY в .env для персонализированной генерации]`;
+                ? `Three years ago, I built a data pipeline that cut reporting time from 6 hours to 20 minutes — and it was that problem-solving challenge that drew me to the kind of work ${vacancy?.employer} is doing with ${vacancy?.title}.
+
+Over the past [X] years, I have [key achievement with metric — e.g., "designed a system processing 5M events/day with 99.9% uptime"]. This directly maps to what your team needs: [specific requirement from JD].
+
+What sets ${vacancy?.employer} apart for me is [specific company product/mission/tech]. I have spent time understanding [specific aspect], and I believe my background in [relevant skill] positions me well to contribute to [specific team goal].
+
+I would welcome the opportunity to discuss how my experience can help [specific outcome]. Happy to connect for a 20-minute call at your convenience.
+
+[Mock Mode — add LLM_API_KEY to .env for AI-personalized generation]`
+                : `Три года назад я построил пайплайн данных, который сократил время формирования отчётов с 6 часов до 20 минут — именно такие инженерные задачи привлекают меня к тому, что делает ${vacancy?.employer} на позиции ${vacancy?.title}.
+
+За последние [X] лет [ключевое достижение с метрикой — например, "спроектировал систему, обрабатывающую 5M событий/день с доступностью 99.9%"]. Это напрямую соответствует тому, что нужно вашей команде: [конкретное требование из JD].
+
+${vacancy?.employer} выделяется для меня [конкретный продукт/миссия/стек компании]. Изучив [конкретный аспект], я вижу, как мой опыт в [релевантный навык] может ускорить [конкретную цель команды].
+
+Буду рад обсудить, как мой опыт поможет достичь [конкретный результат]. Готов созвониться на 20 минут в удобное для вас время.
+
+[Mock Mode — добавьте LLM_API_KEY в .env для AI-персонализированной генерации]`;
             return { coverLetter: mockLetter };
         }
 
         const systemPrompt = isEn
-            ? "You are a professional career consultant at CareerMate platform. You write personalized cover letters based on the candidate's resume and job description. Reply with the letter text only — no markdown, no comments."
-            : 'Ты — профессиональный карьерный консультант платформы CareerMate. Пишешь персонализированные сопроводительные письма на основе резюме кандидата и описания вакансии. Отвечай только текстом письма без markdown и комментариев.';
+            ? `You are a professional career consultant at CareerMate platform trained in Stanford Career Education best practices.
+You write highly personalized cover letters that:
+1. Open with a specific hook tied to the company/role (NOT "I am applying for...")
+2. Connect 2-3 of the candidate's concrete achievements (with metrics where available) directly to the job requirements
+3. Show genuine knowledge of what the company does and why the candidate fits THIS role specifically
+4. Close with a confident, specific call to action
+Rules: no generic phrases, no "I am a hardworking team player", no fluff. Reply with the letter text only — no markdown, no comments.`
+            : `Ты — профессиональный карьерный консультант платформы CareerMate, обученный по стандартам Stanford Career Education.
+Пишешь персонализированные сопроводительные письма, которые:
+1. Открываются конкретным hook'ом — зацепкой, связанной с компанией или ролью (НЕ "Я хотел бы откликнуться на вакансию...")
+2. Связывают 2-3 конкретных достижения кандидата (с метриками там, где они есть) напрямую с требованиями вакансии
+3. Демонстрируют понимание специфики компании и почему кандидат подходит ИМЕННО для этой роли
+4. Закрываются уверенным, конкретным призывом к действию
+Правила: никаких шаблонных фраз, никакого "я ответственный командный игрок", никакой воды. Отвечай только текстом письма без markdown и комментариев.`;
 
         const prompt = isEn
-            ? `You are a professional career consultant. Write a personalized cover letter in English.\n\nJOB DETAILS:\n${vacancyText}\n\nCANDIDATE RESUME:\n${resumeContent}\n\nLength: 3-4 paragraphs. Tone: professional yet genuine. Return ONLY the cover letter text.`
-            : `Ты — профессиональный карьерный консультант. Напиши персонализированное сопроводительное письмо на русском языке.\n\nДАННЫЕ ВАКАНСИИ:\n${vacancyText}\n\nРЕЗЮМЕ КАНДИДАТА:\n${resumeContent}\n\nОбъём: 3-4 абзаца. Верни ТОЛЬКО текст письма.`;
+            ? `Write a highly personalized cover letter in English using the Stanford best practices framework.
+
+COVER LETTER STRUCTURE:
+Para 1 (Hook): Open with something specific about the company or role that genuinely excites the candidate. Reference a product, initiative, or company value. Then bridge to why they're applying.
+Para 2 (Achievement 1): Pick the most relevant achievement from the resume that directly addresses a key job requirement. Use specific metrics if available (XYZ format: "Accomplished X as measured by Y by doing Z").
+Para 3 (Achievement 2 + Fit): Second relevant achievement + explain why THIS company specifically, not just any company. Show you understand their mission/challenges.
+Para 4 (Close): Specific call to action. What you want to discuss in the interview. Confidence, not desperation.
+
+AVOID: "I am applying for...", "I am a passionate...", "I would be a great fit", "References available upon request"
+
+JOB DETAILS:
+${vacancyText}
+
+CANDIDATE RESUME:
+${resumeContent}
+
+Return ONLY the cover letter text. No subject line, no markdown.`
+            : `Напиши высоко персонализированное сопроводительное письмо на русском языке по стандартам Stanford Career Education.
+
+СТРУКТУРА ПИСЬМА:
+Абзац 1 (Hook/Зацепка): Открой чем-то конкретным о компании или роли, что реально привлекает кандидата. Упомяни продукт, инициативу или ценность компании. Затем — мост к почему откликается.
+Абзац 2 (Достижение 1): Выбери наиболее релевантное достижение из резюме, которое напрямую закрывает ключевое требование вакансии. Используй конкретные метрики если есть (CAR: Контекст → Действие → Результат с цифрами).
+Абзац 3 (Достижение 2 + Fit): Второе релевантное достижение + объясни почему ИМЕННО эта компания, а не любая другая. Покажи понимание их миссии/задач.
+Абзац 4 (Закрытие): Конкретный призыв к действию. Что хочешь обсудить на интервью. Уверенность, а не просьба.
+
+ЗАПРЕЩЕНО: "Я хотел бы откликнуться на вакансию", "Я ответственный и целеустремлённый", "Буду рад рассмотреть любые предложения"
+
+ДАННЫЕ ВАКАНСИИ:
+${vacancyText}
+
+РЕЗЮМЕ КАНДИДАТА:
+${resumeContent}
+
+Верни ТОЛЬКО текст письма. Без темы письма, без markdown.`;
 
         try {
             const chain = new CoverLetterChain(llm);
@@ -231,5 +338,74 @@ ${vacancyText}
                 : `Добрый день!\n\nХочу откликнуться на вакансию ${vacancy?.title} в компании ${vacancy?.employer}.\n\nС уважением`;
             return { coverLetter: fallback };
         }
+    }
+
+    async generateCareerPathAnalysis(prompt: string): Promise<any> {
+        const llm = this.llmProvider.chat;
+        if (!llm) {
+            this.logger.warn('LLM_API_KEY is not set. Using mocked career assessment.');
+            return this.getMockCareerResult();
+        }
+        try {
+            const chain = new CareerPathChain(llm);
+            return await chain.invoke({ prompt });
+        } catch (error: any) {
+            this.logger.error(`LLM Error generating career paths: ${error.message}`);
+            return this.getMockCareerResult();
+        }
+    }
+
+    private getMockCareerResult(): any {
+        return {
+            personalitySummary: 'По результатам теста вы — аналитик с технической направленностью. Вам близка работа с данными и системами, предпочитаете глубокий фокус над широкими коммуникациями. (Mock Mode)',
+            dominantTraits: ['Аналитический', 'Технический', 'Структурированный'],
+            topPaths: [
+                {
+                    rank: 1, role: 'Backend Developer', domain: 'it', matchScore: 92,
+                    matchReason: 'Ваш аналитический склад ума и техническая ориентация идеально подходят для backend-разработки. (Mock)',
+                    roadmap: [
+                        { level: 'Junior', timeframe: '0-1 год', skills: ['Node.js', 'SQL', 'Git'], description: 'Изучаете основы серверной разработки, работаете с простыми CRUD-операциями.' },
+                        { level: 'Middle', timeframe: '1-3 года', skills: ['System Design', 'Redis', 'Docker'], description: 'Проектируете самостоятельные сервисы, начинаете понимать архитектуру систем.' },
+                        { level: 'Senior', timeframe: '3-6 лет', skills: ['Microservices', 'Kafka', 'k8s'], description: 'Ведёте сложные технические решения, менторите junior-разработчиков.' },
+                        { level: 'Lead/Staff', timeframe: '6+ лет', skills: ['Architecture', 'Team Leadership'], description: 'Определяете технологический стек, влияете на roadmap продукта.' },
+                    ],
+                    currentSkillsMatch: ['TypeScript', 'Node.js'],
+                    skillsToLearn: ['PostgreSQL', 'Docker', 'System Design'],
+                    salaryRange: '150 000 — 350 000 ₽',
+                    pros: ['Высокий спрос на рынке', 'Техническая глубина'],
+                    cons: ['Меньше взаимодействия с пользователями'],
+                },
+                {
+                    rank: 2, role: 'Data Scientist', domain: 'it', matchScore: 85,
+                    matchReason: 'Работа с данными и паттернами соответствует вашему аналитическому профилю. (Mock)',
+                    roadmap: [
+                        { level: 'Junior', timeframe: '0-1 год', skills: ['Python', 'pandas', 'SQL'], description: 'Анализируете данные, строите базовые модели.' },
+                        { level: 'Middle', timeframe: '1-3 года', skills: ['scikit-learn', 'Spark', 'A/B тесты'], description: 'Самостоятельно ведёте ML-проекты от гипотезы до продакшена.' },
+                        { level: 'Senior', timeframe: '3-6 лет', skills: ['Deep Learning', 'MLOps', 'LLMs'], description: 'Разрабатываете сложные ML-системы, влияете на бизнес-метрики.' },
+                        { level: 'Lead/Staff', timeframe: '6+ лет', skills: ['ML Strategy', 'Team Building'], description: 'Выстраиваете ML-платформу компании, управляете командой.' },
+                    ],
+                    currentSkillsMatch: ['Python', 'SQL'],
+                    skillsToLearn: ['Machine Learning', 'Statistics', 'Spark'],
+                    salaryRange: '180 000 — 400 000 ₽',
+                    pros: ['Перспективная область', 'Разнообразие задач'],
+                    cons: ['Требует сильной математической базы'],
+                },
+                {
+                    rank: 3, role: 'Solutions Architect', domain: 'it', matchScore: 79,
+                    matchReason: 'Системное мышление и структурированность — ключевые качества для архитектора. (Mock)',
+                    roadmap: [
+                        { level: 'Senior Dev', timeframe: '0-3 года', skills: ['System Design', 'Cloud', 'Patterns'], description: 'Необходимо сначала стать Senior Developer в одном из направлений.' },
+                        { level: 'Tech Lead', timeframe: '3-5 лет', skills: ['Architecture patterns', 'Trade-offs'], description: 'Принимаете технические решения на уровне команды.' },
+                        { level: 'Architect', timeframe: '5-8 лет', skills: ['AWS/GCP', 'Distributed systems'], description: 'Проектируете архитектуру крупных систем и платформ.' },
+                        { level: 'Principal', timeframe: '8+ лет', skills: ['Strategy', 'CTO track'], description: 'Определяете техническую стратегию компании или крупного продукта.' },
+                    ],
+                    currentSkillsMatch: ['System Design', 'TypeScript'],
+                    skillsToLearn: ['Cloud Architecture', 'Distributed Systems', 'Business Strategy'],
+                    salaryRange: '250 000 — 600 000 ₽',
+                    pros: ['Высокий уровень влияния', 'Разнообразие задач'],
+                    cons: ['Долгий путь к позиции'],
+                },
+            ],
+        };
     }
 }

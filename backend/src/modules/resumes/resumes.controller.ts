@@ -1,27 +1,33 @@
 import {
     Controller, Get, Post, Body, Delete, Param,
     UseInterceptors, UploadedFile, Query, ParseFilePipe,
-    MaxFileSizeValidator, FileTypeValidator, Redirect,
+    MaxFileSizeValidator, FileTypeValidator, Redirect, UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { ResumesService } from './resumes.service';
 
 @ApiTags('Resumes')
 @Controller('resumes')
+@UseGuards(JwtAuthGuard)
 export class ResumesController {
     constructor(private readonly resumesService: ResumesService) {}
 
     @Get('history')
     @ApiOperation({ summary: 'Get generated resumes and sent history' })
-    async getHistory() {
-        return this.resumesService.getHistory();
+    async getHistory(@CurrentUser() user: { userId: string }) {
+        return this.resumesService.getHistory(user.userId);
     }
 
     @Post('cover-letter')
     @ApiOperation({ summary: 'Generate cover letter' })
-    async generateCoverLetter(@Body() body: { company: string; position: string; keyPoints?: string; profile?: any }) {
-        const text = await this.resumesService.generateCoverLetter(body.company, body.position, body.keyPoints, body.profile);
+    async generateCoverLetter(
+        @CurrentUser() user: { userId: string },
+        @Body() body: { company: string; position: string; keyPoints?: string; profile?: any },
+    ) {
+        const text = await this.resumesService.generateCoverLetter(body.company, body.position, body.keyPoints, body.profile, user.userId);
         return { text };
     }
 
@@ -39,6 +45,7 @@ export class ResumesController {
     @ApiQuery({ name: 'title', required: false, description: 'Display name for the resume' })
     @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
     async uploadResume(
+        @CurrentUser() user: { userId: string },
         @UploadedFile(new ParseFilePipe({
             validators: [
                 new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
@@ -49,26 +56,29 @@ export class ResumesController {
         })) file: Express.Multer.File,
         @Query('title') title: string,
     ) {
-        return this.resumesService.uploadResumeFile(file, title || file.originalname);
+        return this.resumesService.uploadResumeFile(file, title || file.originalname, user.userId);
     }
 
     @Get(':id/file')
     @ApiOperation({ summary: 'Redirect to presigned download URL for original uploaded file' })
     @Redirect()
-    async getDownloadUrl(@Param('id') id: string) {
-        const url = await this.resumesService.getDownloadUrl(id);
+    async getDownloadUrl(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+        const url = await this.resumesService.getDownloadUrl(id, user.userId);
         return { url, statusCode: 302 };
     }
 
     @Post()
     @ApiOperation({ summary: 'Save an uploaded or generated resume to the database' })
-    async saveResume(@Body() body: { title: string; subtitle?: string; content?: string; type?: string; reviewData?: any }) {
-        return this.resumesService.saveResume(body.title, body.subtitle, body.content, body.type, body.reviewData);
+    async saveResume(
+        @CurrentUser() user: { userId: string },
+        @Body() body: { title: string; subtitle?: string; content?: string; type?: string; reviewData?: any },
+    ) {
+        return this.resumesService.saveResume(body.title, body.subtitle, body.content, body.type, body.reviewData, user.userId);
     }
 
     @Delete(':id')
     @ApiOperation({ summary: 'Delete a resume' })
-    async deleteResume(@Param('id') id: string) {
-        return this.resumesService.deleteResume(id);
+    async deleteResume(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+        return this.resumesService.deleteResume(id, user.userId);
     }
 }

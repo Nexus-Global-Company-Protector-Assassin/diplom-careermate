@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>CareerMate Auth — Финальный макет</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0b0f; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column; }
+
+  .top-bar { background: #0a0b0f; border-bottom: 1px solid #1e2030; padding: 10px 20px; display: flex; align-items: center; gap: 12px; }
+  .top-bar-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+  .tab-btn { padding: 5px 14px; border-radius: 6px; border: 1px solid #2a2d3e; background: transparent; color: #94a3b8; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .tab-btn.active { background: #1e2235; border-color: #6366f1; color: #a5b4fc; }
+
+  .page { display: flex; height: calc(100vh - 41px); }
+
+  /* LEFT PANEL */
+  .left { flex: 1; background: linear-gradient(160deg, #0f0c29 0%, #1e1b4b 35%, #312e81 70%, #4c1d95 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 40px; gap: 32px; position: relative; overflow: hidden; }
+  .left::before { content: ''; position: absolute; top: -60px; right: -60px; width: 220px; height: 220px; background: rgba(99,102,241,0.15); border-radius: 50%; filter: blur(50px); }
+  .left::after { content: ''; position: absolute; bottom: -40px; left: -40px; width: 180px; height: 180px; background: rgba(139,92,246,0.15); border-radius: 50%; filter: blur(40px); }
+
+  .brand { display: flex; align-items: center; gap: 12px; z-index: 1; }
+  .brand-icon { width: 44px; height: 44px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 30px rgba(99,102,241,0.4); font-size: 22px; }
+  .brand-name { font-size: 24px; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
+
+  .hero-text { text-align: center; z-index: 1; }
+  .hero-title { font-size: 28px; font-weight: 700; color: #fff; line-height: 1.25; margin-bottom: 10px; }
+  .hero-title span { background: linear-gradient(135deg, #a5b4fc, #c4b5fd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .hero-sub { font-size: 14px; color: rgba(255,255,255,0.55); line-height: 1.6; max-width: 280px; }
+
+  .preview-frame { z-index: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 16px; width: 100%; max-width: 320px; backdrop-filter: blur(8px); }
+  .preview-topbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .preview-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .preview-title { height: 8px; background: rgba(255,255,255,0.25); border-radius: 4px; width: 80px; }
+  .preview-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .preview-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; flex: 1; }
+  .preview-card-num { height: 12px; background: rgba(165,180,252,0.5); border-radius: 4px; width: 40px; margin-bottom: 4px; }
+  .preview-card-label { height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; width: 60px; }
+  .preview-bar-row { display: flex; align-items: center; gap: 8px; }
+  .preview-bar-label { height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; width: 50px; flex-shrink: 0; }
+  .preview-bar { height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; flex: 1; overflow: hidden; }
+  .preview-bar-fill { height: 100%; background: linear-gradient(90deg, #6366f1, #8b5cf6); border-radius: 4px; }
+
+  /* RIGHT PANEL */
+  .right { width: 480px; background: #0f1117; display: flex; align-items: center; justify-content: center; padding: 48px 48px; }
+  .form-wrap { width: 100%; max-width: 360px; }
+
+  .form-header { margin-bottom: 28px; }
+  .form-greeting { font-size: 24px; font-weight: 700; color: #f1f5f9; margin-bottom: 6px; letter-spacing: -0.02em; }
+  .form-sub { font-size: 14px; color: #64748b; }
+
+  /* Tabs */
+  .tabs { display: flex; background: #1a1d2e; border-radius: 10px; padding: 4px; margin-bottom: 28px; }
+  .tab { flex: 1; padding: 8px; text-align: center; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; color: #64748b; }
+  .tab.active { background: linear-gradient(135deg, #6366f1, #7c3aed); color: #fff; box-shadow: 0 2px 8px rgba(99,102,241,0.3); }
+
+  /* Fields */
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; font-weight: 500; }
+  .field input { width: 100%; background: #1a1d2e; border: 1px solid #2a2d3e; border-radius: 8px; padding: 10px 14px; font-size: 14px; color: #e2e8f0; outline: none; transition: border-color 0.15s; }
+  .field input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+  .field input::placeholder { color: #3a3d4e; }
+
+  .forgot { text-align: right; margin-top: -8px; margin-bottom: 20px; }
+  .forgot a { font-size: 12px; color: #6366f1; text-decoration: none; }
+
+  .btn-primary { width: 100%; padding: 11px; background: linear-gradient(135deg, #6366f1, #7c3aed); border: none; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; letter-spacing: 0.01em; box-shadow: 0 4px 14px rgba(99,102,241,0.3); transition: opacity 0.15s; }
+  .btn-primary:hover { opacity: 0.9; }
+
+  .form-footer { margin-top: 20px; text-align: center; font-size: 13px; color: #475569; }
+  .form-footer a { color: #818cf8; text-decoration: none; }
+
+  /* Register extra fields (hidden in login mode) */
+  .register-only { display: none; }
+
+  /* Tab switcher JS */
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <span class="top-bar-label">Предпросмотр:</span>
+  <button class="tab-btn active" onclick="showLogin(this)">Вход (Login)</button>
+  <button class="tab-btn" onclick="showRegister(this)">Регистрация (Register)</button>
+</div>
+
+<div class="page">
+
+  <!-- LEFT: Branding -->
+  <div class="left">
+    <div class="brand">
+      <div class="brand-icon">🎯</div>
+      <div class="brand-name">CareerMate</div>
+    </div>
+
+    <div class="hero-text">
+      <div class="hero-title">Найди работу<br>с помощью <span>AI-помощника</span></div>
+      <div class="hero-sub">Анализ резюме, подбор вакансий и подготовка к интервью — всё в одном месте</div>
+    </div>
+
+    <div class="preview-frame">
+      <div class="preview-topbar">
+        <div class="preview-dot" style="background:#ef4444;"></div>
+        <div class="preview-dot" style="background:#f59e0b;"></div>
+        <div class="preview-dot" style="background:#22c55e;"></div>
+        <div class="preview-title"></div>
+      </div>
+      <div class="preview-row">
+        <div class="preview-card">
+          <div class="preview-card-num" style="width:30px;"></div>
+          <div class="preview-card-label" style="width:55px;"></div>
+        </div>
+        <div class="preview-card">
+          <div class="preview-card-num" style="width:36px;background:rgba(34,197,94,0.5);"></div>
+          <div class="preview-card-label"></div>
+        </div>
+        <div class="preview-card">
+          <div class="preview-card-num" style="width:28px;background:rgba(251,191,36,0.5);"></div>
+          <div class="preview-card-label" style="width:45px;"></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+        <div class="preview-bar-row">
+          <div class="preview-bar-label"></div>
+          <div class="preview-bar"><div class="preview-bar-fill" style="width:75%;"></div></div>
+        </div>
+        <div class="preview-bar-row">
+          <div class="preview-bar-label" style="width:40px;"></div>
+          <div class="preview-bar"><div class="preview-bar-fill" style="width:50%;"></div></div>
+        </div>
+        <div class="preview-bar-row">
+          <div class="preview-bar-label" style="width:55px;"></div>
+          <div class="preview-bar"><div class="preview-bar-fill" style="width:88%;"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Form -->
+  <div class="right">
+    <div class="form-wrap">
+
+      <div class="form-header">
+        <div class="form-greeting" id="form-title">С возвращением 👋</div>
+        <div class="form-sub" id="form-subtitle">Войдите в аккаунт, чтобы продолжить</div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" id="tab-login" onclick="switchTab('login')">Вход</div>
+        <div class="tab" id="tab-register" onclick="switchTab('register')">Регистрация</div>
+      </div>
+
+      <form>
+        <!-- Register only: Name -->
+        <div class="field register-only" id="field-name">
+          <label>Имя</label>
+          <input type="text" placeholder="Алексей Петров">
+        </div>
+
+        <div class="field">
+          <label>Email</label>
+          <input type="email" placeholder="you@example.com">
+        </div>
+
+        <div class="field">
+          <label>Пароль</label>
+          <input type="password" placeholder="••••••••">
+        </div>
+
+        <!-- Login only: forgot -->
+        <div class="forgot" id="forgot-link">
+          <a href="#">Забыли пароль?</a>
+        </div>
+
+        <!-- Register only: confirm password -->
+        <div class="field register-only" id="field-confirm">
+          <label>Подтвердите пароль</label>
+          <input type="password" placeholder="••••••••">
+        </div>
+
+        <button type="button" class="btn-primary" id="submit-btn">Войти</button>
+      </form>
+
+      <div class="form-footer" id="form-footer">
+        Нет аккаунта? <a href="#" onclick="switchTab('register');return false;">Зарегистрироваться</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function switchTab(mode) {
+  const isLogin = mode === 'login';
+
+  document.getElementById('tab-login').className = 'tab' + (isLogin ? ' active' : '');
+  document.getElementById('tab-register').className = 'tab' + (!isLogin ? ' active' : '');
+
+  document.getElementById('form-title').textContent = isLogin ? 'С возвращением 👋' : 'Создать аккаунт';
+  document.getElementById('form-subtitle').textContent = isLogin
+    ? 'Войдите в аккаунт, чтобы продолжить'
+    : 'Зарегистрируйтесь и начните поиск работы';
+
+  document.getElementById('forgot-link').style.display = isLogin ? 'block' : 'none';
+  document.getElementById('submit-btn').textContent = isLogin ? 'Войти' : 'Зарегистрироваться';
+  document.getElementById('form-footer').innerHTML = isLogin
+    ? 'Нет аккаунта? <a href="#" onclick="switchTab(\'register\');return false;">Зарегистрироваться</a>'
+    : 'Уже есть аккаунт? <a href="#" onclick="switchTab(\'login\');return false;">Войти</a>';
+
+  document.querySelectorAll('.register-only').forEach(el => {
+    el.style.display = isLogin ? 'none' : 'block';
+  });
+}
+
+function showLogin(btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  switchTab('login');
+}
+function showRegister(btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  switchTab('register');
+}
+</script>
+</body>
+</html>

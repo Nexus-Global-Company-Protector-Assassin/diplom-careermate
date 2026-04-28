@@ -1,9 +1,12 @@
-import { Controller, Get, Post, Query, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Query, Body, Param, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { VacanciesService } from './vacancies.service';
 
 @ApiTags('Vacancies')
 @Controller('vacancies')
+@UseGuards(JwtAuthGuard)
 export class VacanciesController {
     constructor(private readonly vacanciesService: VacanciesService) { }
 
@@ -48,6 +51,7 @@ export class VacanciesController {
     @ApiQuery({ name: 'skills', required: false, description: 'Comma-separated skill list' })
     @ApiQuery({ name: 'limit', required: false })
     async getRecommended(
+        @CurrentUser() user: { userId: string },
         @Query('position') position?: string,
         @Query('skills') skillsRaw?: string,
         @Query('salary') salaryStr?: string,
@@ -60,7 +64,7 @@ export class VacanciesController {
         const salary = salaryStr ? parseInt(salaryStr, 10) : undefined;
         const lim = limit ? parseInt(limit) : 10;
 
-        const vacancies = await this.vacanciesService.getRecommendedForProfile(pos, profileSkills, lim, salary);
+        const vacancies = await this.vacanciesService.getRecommendedForProfile(pos, profileSkills, lim, salary, user.userId);
 
         return vacancies.map((v: any) => ({
             id: v.id,
@@ -82,10 +86,10 @@ export class VacanciesController {
                     : 'text-orange-700 bg-orange-100 dark:text-orange-400 dark:bg-orange-900/30',
             logo: (v.employer || 'X')[0].toUpperCase(),
             url: v.url || null,
-            // NEW: Archetype, Gap Analysis, Ghost Job freshness
             archetype: v.archetype || 'Unknown',
             matchedSkills: v.matchedSkills || [],
             missingSkills: v.missingSkills || [],
+            matchReasons: v.matchReasons || [],
             freshnessScore: v.freshness?.score ?? null,
             freshnessLabel: v.freshness?.label ?? null,
             daysOld: v.freshness?.daysOld ?? null,
@@ -102,38 +106,55 @@ export class VacanciesController {
         return `${Math.floor(diff / 30)} мес. назад`;
     }
 
-    @Get('responses')
-    @ApiOperation({ summary: 'Get user responses (stub)' })
-    getResponses() {
-        return [];
+    @Post(':id/interaction')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @ApiOperation({ summary: 'Record behavioral interaction signal for a vacancy' })
+    @ApiParam({ name: 'id', description: 'Vacancy ID' })
+    async trackInteraction(
+        @CurrentUser() user: { userId: string },
+        @Param('id') vacancyId: string,
+        @Body() body: { type: string },
+    ): Promise<void> {
+        await this.vacanciesService.recordInteraction(vacancyId, body.type, user.userId);
     }
 
-    @Post('responses')
-    @ApiOperation({ summary: 'Apply to a vacancy (stub)' })
-    applyToVacancy(@Body() body: { vacancyId: string; coverLetter?: string }) {
-        return { success: true, vacancyId: body.vacancyId, status: 'Отправлено' };
+    @Get('favorites')
+    @ApiOperation({ summary: 'Get favorite vacancy IDs for current user' })
+    getFavorites(@CurrentUser() user: { userId: string }) {
+        return this.vacanciesService.getFavorites(user.userId);
     }
 
     @Post('favorites')
-    @ApiOperation({ summary: 'Toggle favorite vacancy (stub)' })
-    toggleFavorite(@Body() body: { vacancyId: string; isFavorite: boolean }) {
-        return { success: true, vacancyId: body.vacancyId, isFavorite: body.isFavorite };
+    @ApiOperation({ summary: 'Toggle favorite vacancy' })
+    toggleFavorite(
+        @CurrentUser() user: { userId: string },
+        @Body() body: { vacancyId: string },
+    ) {
+        return this.vacanciesService.toggleFavorite(body.vacancyId, user.userId);
     }
 
     @Get(':id/interview-prep')
     @ApiOperation({ summary: 'Generate STAR+R interview preparation for a vacancy' })
     @ApiParam({ name: 'id', description: 'Vacancy ID' })
     @ApiQuery({ name: 'resumeId', required: false, description: 'Resume ID to use for interview prep' })
-    async getInterviewPrep(@Param('id') id: string, @Query('resumeId') resumeId?: string) {
-        return this.vacanciesService.interviewPrep(id, resumeId);
+    async getInterviewPrep(
+        @CurrentUser() user: { userId: string },
+        @Param('id') id: string,
+        @Query('resumeId') resumeId?: string,
+    ) {
+        return this.vacanciesService.interviewPrep(id, resumeId, user.userId);
     }
 
     @Get(':id/evaluation')
     @ApiOperation({ summary: 'Get AI deep 6-block analysis for a vacancy' })
     @ApiParam({ name: 'id', description: 'Vacancy ID' })
     @ApiQuery({ name: 'resumeId', required: false, description: 'Resume ID to evaluate against' })
-    async getEvaluation(@Param('id') id: string, @Query('resumeId') resumeId?: string) {
-        return this.vacanciesService.evaluateVacancy(id, resumeId);
+    async getEvaluation(
+        @CurrentUser() user: { userId: string },
+        @Param('id') id: string,
+        @Query('resumeId') resumeId?: string,
+    ) {
+        return this.vacanciesService.evaluateVacancy(id, resumeId, user.userId);
     }
 
     @Get(':id/cover-letter')
@@ -142,11 +163,11 @@ export class VacanciesController {
     @ApiQuery({ name: 'resumeId', required: false, description: 'Resume ID to use for cover letter generation' })
     @ApiQuery({ name: 'language', required: false, description: 'Language for cover letter: ru or en', enum: ['ru', 'en'] })
     async getCoverLetter(
+        @CurrentUser() user: { userId: string },
         @Param('id') id: string,
         @Query('resumeId') resumeId?: string,
         @Query('language') language: 'ru' | 'en' = 'ru',
     ) {
-        return this.vacanciesService.generateCoverLetter(id, resumeId, language);
+        return this.vacanciesService.generateCoverLetter(id, resumeId, language, user.userId);
     }
 }
-

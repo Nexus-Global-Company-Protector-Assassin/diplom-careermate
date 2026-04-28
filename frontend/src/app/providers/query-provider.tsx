@@ -11,11 +11,22 @@ function shouldRetry(failureCount: number, error: unknown): boolean {
 }
 
 function handleGlobalError(error: unknown) {
-    const message = toastMessageForError(error);
+    if (error instanceof ApiError && error.kind === 'quota_exceeded') {
+        window.dispatchEvent(new CustomEvent('quota-exceeded', {
+            detail: {
+                type: error.meta?.type ?? 'ai_daily',
+                message: error.message,
+                used: error.meta?.used ?? 0,
+                limit: error.meta?.limit ?? 0,
+            },
+        }));
+        return;
+    }
     if (error instanceof ApiError && error.kind === 'auth') {
         toast.error('Сессия истекла', { description: 'Пожалуйста, войдите снова' });
         return;
     }
+    const message = toastMessageForError(error);
     toast.error(message);
 }
 

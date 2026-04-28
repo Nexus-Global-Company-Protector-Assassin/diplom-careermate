@@ -5,24 +5,31 @@ import { PrismaService } from '../../database/prisma.service';
 export class AnalyticsService {
     constructor(private prisma: PrismaService) {}
 
-    async getWeeklyReport() {
+    private async getProfileIdForUser(userId: string): Promise<string | null> {
+        const profile = await this.prisma.profile.findFirst({ where: { userId } });
+        return profile?.id ?? null;
+    }
+
+    async getWeeklyReport(userId: string) {
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        const profileId = await this.getProfileIdForUser(userId);
 
-        const [vacancyCount, interviewCount, responseCount, aiResumeCount] = await Promise.all([
+        const [vacancyCount, interviewCount, favoritesCount, aiResumeCount] = await Promise.all([
             this.prisma.vacancy.count({
                 where: { createdAt: { gte: oneWeekAgo } },
             }),
             this.prisma.interview.count({
-                where: { status: 'upcoming' },
+                where: { status: 'upcoming', ...(profileId && { profileId }) },
             }),
-            this.prisma.vacancyResponse.count({
-                where: { responseDate: { gte: oneWeekAgo } },
+            this.prisma.favoriteVacancy.count({
+                where: { createdAt: { gte: oneWeekAgo }, ...(profileId && { profileId }) },
             }),
             this.prisma.resume.count({
                 where: {
                     type: 'ai_improved',
                     createdAt: { gte: oneWeekAgo },
+                    ...(profileId && { profileId }),
                 },
             }),
         ]);
@@ -30,18 +37,18 @@ export class AnalyticsService {
         return [
             { icon: '📋', value: String(vacancyCount), label: 'Новые вакансии' },
             { icon: '🗓️', value: String(interviewCount), label: 'Интервью назначено' },
-            { icon: '📧', value: String(responseCount), label: 'Откликов отправлено' },
+            { icon: '❤️', value: String(favoritesCount), label: 'Сохранено в избранное' },
             { icon: '🤖', value: String(aiResumeCount), label: 'Рекомендации ИИ' },
         ];
     }
 
-    async getDashboardSummary() {
-        // Get first user's profile (PoC mode)
+    async getDashboardSummary(userId: string) {
         const profile = await this.prisma.profile.findFirst({
+            where: { userId },
             include: {
                 resumes: true,
                 interviews: true,
-                vacancyResponses: true,
+                favoriteVacancies: true,
             },
         });
 
@@ -52,7 +59,7 @@ export class AnalyticsService {
         // Career progress calculation
         const hasProfile = !!(profile.fullName && profile.desiredPosition);
         const hasResume = profile.resumes.length > 0;
-        const hasResponses = profile.vacancyResponses.length > 0;
+        const hasFavorites = profile.favoriteVacancies.length > 0;
         const hasInvitations = profile.interviews.length > 0;
 
         // Profile completion calculation
@@ -68,7 +75,7 @@ export class AnalyticsService {
         ];
 
         // Achievement calculation
-        const totalResponses = profile.vacancyResponses.length;
+        const totalFavorites = profile.favoriteVacancies.length;
         const totalInterviews = profile.interviews.length;
         const totalResumes = profile.resumes.filter(r => r.type === 'resume').length;
         const completedCount = completionFields.filter(f => f.completed).length;
@@ -80,8 +87,8 @@ export class AnalyticsService {
                 unlocked: hasResume, progress: totalResumes, maxProgress: 1, color: 'text-yellow-500',
             },
             {
-                id: '2', name: 'Активный соискатель', description: 'Отправить 10 откликов',
-                unlocked: totalResponses >= 10, progress: Math.min(totalResponses, 10), maxProgress: 10, color: 'text-blue-500',
+                id: '2', name: 'Исследователь', description: 'Сохранить 10 вакансий в избранное',
+                unlocked: totalFavorites >= 10, progress: Math.min(totalFavorites, 10), maxProgress: 10, color: 'text-blue-500',
             },
             {
                 id: '3', name: 'Целеустремлённый', description: 'Установить карьерную цель',
@@ -115,7 +122,7 @@ export class AnalyticsService {
             careerProgress: [
                 { label: 'Анализ завершен', done: hasProfile },
                 { label: 'Резюме готово', done: hasResume },
-                { label: 'Отклики идут', done: hasResponses },
+                { label: 'Вакансии сохранены', done: hasFavorites },
                 { label: 'Приглашения', done: hasInvitations },
             ],
             profileCompletion: completionFields,
@@ -124,7 +131,7 @@ export class AnalyticsService {
         };
     }
 
-    async getAnalyticsStats(period: string) {
+    async getAnalyticsStats(period: string, userId: string) {
         const now = new Date();
         let startDate: Date;
         let previousStartDate: Date;
@@ -147,19 +154,21 @@ export class AnalyticsService {
                 previousStartDate = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
         }
 
+        const profileId = await this.getProfileIdForUser(userId);
+
         // Current period stats
         const [responses, interviews, prevResponses, prevInterviews] = await Promise.all([
             this.prisma.vacancyResponse.findMany({
-                where: { responseDate: { gte: startDate } },
+                where: { responseDate: { gte: startDate }, ...(profileId && { profileId }) },
             }),
             this.prisma.interview.findMany({
-                where: { createdAt: { gte: startDate } },
+                where: { createdAt: { gte: startDate }, ...(profileId && { profileId }) },
             }),
             this.prisma.vacancyResponse.count({
-                where: { responseDate: { gte: previousStartDate, lt: startDate } },
+                where: { responseDate: { gte: previousStartDate, lt: startDate }, ...(profileId && { profileId }) },
             }),
             this.prisma.interview.count({
-                where: { createdAt: { gte: previousStartDate, lt: startDate } },
+                where: { createdAt: { gte: previousStartDate, lt: startDate }, ...(profileId && { profileId }) },
             }),
         ]);
 
@@ -169,7 +178,7 @@ export class AnalyticsService {
         const totalInterviews = interviews.length;
 
         // Profile completion percentage
-        const profile = await this.prisma.profile.findFirst();
+        const profile = await this.prisma.profile.findFirst({ where: { userId } });
         const profileOptimization = profile ? this.calculateProfileCompletion(profile) : 0;
 
         // Response change
@@ -202,10 +211,12 @@ export class AnalyticsService {
         ];
 
         // Activity data (group responses by day/week/month)
-        const activityData = await this.getActivityData(period, startDate);
+        const activityData = await this.getActivityData(period, startDate, profileId ?? undefined);
 
         // Status pie chart
-        const allResponses = await this.prisma.vacancyResponse.findMany();
+        const allResponses = await this.prisma.vacancyResponse.findMany({
+            where: profileId ? { profileId } : undefined,
+        });
         const statusData = [
             { name: 'Новые', value: allResponses.filter(r => r.status === 'sent').length, color: '#22c55e' },
             { name: 'Рассматриваются', value: allResponses.filter(r => r.status === 'viewing').length, color: '#3b82f6' },
@@ -222,14 +233,14 @@ export class AnalyticsService {
         return { statsCards, activityData, statusData: finalStatusData };
     }
 
-    private async getActivityData(period: string, startDate: Date) {
+    private async getActivityData(period: string, startDate: Date, profileId?: string) {
         const responses = await this.prisma.vacancyResponse.findMany({
-            where: { responseDate: { gte: startDate } },
+            where: { responseDate: { gte: startDate }, ...(profileId && { profileId }) },
             orderBy: { responseDate: 'asc' },
         });
 
         const interviews = await this.prisma.interview.findMany({
-            where: { createdAt: { gte: startDate } },
+            where: { createdAt: { gte: startDate }, ...(profileId && { profileId }) },
             orderBy: { createdAt: 'asc' },
         });
 
@@ -366,7 +377,7 @@ export class AnalyticsService {
             careerProgress: [
                 { label: 'Анализ завершен', done: false },
                 { label: 'Резюме готово', done: false },
-                { label: 'Отклики идут', done: false },
+                { label: 'Вакансии сохранены', done: false },
                 { label: 'Приглашения', done: false },
             ],
             profileCompletion: [
