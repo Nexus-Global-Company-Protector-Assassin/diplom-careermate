@@ -300,14 +300,43 @@ export function ResumeContent() {
       degree: e.degree || '',
     })) : []
     const skills = profileData.skills?.technical ? [...(profileData.skills.technical || []), ...(profileData.skills.professional || [])] : []
+
+    // Email is on User (auth), not on Profile — decode from JWT
+    let email = ''
+    if (typeof window !== 'undefined') {
+      try {
+        const token = localStorage.getItem('access_token')
+        if (token) {
+          const payload = JSON.parse(atob(token.split('.')[1] || ''))
+          email = payload?.email || ''
+        }
+      } catch {
+        email = ''
+      }
+    }
+
+    // aboutMe in DB sometimes encodes "Telegram: ... | GitHub: ... | Email: ..." (see profile-content.tsx)
+    // Extract them so the agent gets clean fields.
+    const aboutMeRaw = profileData.aboutMe || ''
+    const telegramFromAbout = aboutMeRaw.match(/Telegram:\s*([^\n|]+)/i)?.[1]?.trim()
+    const githubFromAbout = aboutMeRaw.match(/GitHub:\s*([^\n|]+)/i)?.[1]?.trim()
+    const emailFromAbout = aboutMeRaw.match(/Email:\s*([^\n|]+)/i)?.[1]?.trim()
+
     return {
       fullName: profileData.fullName || '',
-      desiredPosition: Array.isArray(profileData.workExperience) && profileData.workExperience[0]?.position || 'Специалист',
-      experienceYears: we.length * 2,
+      desiredPosition: profileData.desiredPosition || (Array.isArray(profileData.workExperience) && profileData.workExperience[0]?.position) || 'Специалист',
+      experienceYears: typeof profileData.experienceYears === 'number' ? profileData.experienceYears : we.length * 2,
       skills,
       workExperience: we,
       education: edu,
-      aboutMe: profileData.aboutMe || '',
+      aboutMe: aboutMeRaw,
+      email: email || emailFromAbout || '',
+      phone: profileData.phone || '',
+      location: profileData.location || '',
+      linkedinUrl: profileData.linkedinUrl || '',
+      githubUrl: profileData.githubUrl || githubFromAbout || '',
+      portfolioUrl: profileData.portfolioUrl || '',
+      telegram: telegramFromAbout || '',
     }
   }
 
@@ -1190,14 +1219,14 @@ export function ResumeContent() {
 
       {/* Preview Modal */}
       <Dialog open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
-        <DialogContent className="sm:max-w-[600px] bg-card border-border">
+        <DialogContent className="sm:max-w-[600px] bg-card border-border max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-card-foreground">{selectedResume?.title}</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 flex-1 overflow-y-auto min-h-0">
             <div className="bg-muted rounded-lg p-6 min-h-[300px] flex flex-col text-sm border border-border">
               {selectedResume?.content ? (
-                <div className="flex-1 whitespace-pre-wrap text-card-foreground">
+                <div className="flex-1 whitespace-pre-wrap break-words text-card-foreground">
                   {selectedResume.content}
                 </div>
               ) : (

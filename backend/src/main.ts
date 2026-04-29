@@ -1,3 +1,11 @@
+// Force Node DNS to prefer IPv4. Some networks (Windows + ISP without IPv6 transit)
+// route IPv6 to dead ends, which makes outbound HTTPS to Google OAuth / Adzuna /
+// Polza fail at the TLS socket layer with "socket hang up". Setting this BEFORE
+// any module loads (so it takes effect for `https.request`, axios, passport-oauth2,
+// etc.) avoids `InternalOAuthError: Failed to obtain access token` on Google sign-in.
+import { setDefaultResultOrder } from 'dns';
+try { setDefaultResultOrder('ipv4first'); } catch { /* Node < 18 */ }
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { Logger, ValidationPipe } from '@nestjs/common';
@@ -43,7 +51,7 @@ async function bootstrap() {
     // Global Prefix
     const globalPrefix = configService.get('API_PREFIX') || 'api/v1';
     app.setGlobalPrefix(globalPrefix, {
-        exclude: ['/'],
+        exclude: ['/', 'auth/google', 'auth/google/callback'],
     });
 
     // Global Validation Pipe

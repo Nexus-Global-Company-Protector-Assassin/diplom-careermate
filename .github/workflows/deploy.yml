@@ -21,8 +21,7 @@ env:
 
 jobs:
   # ------------------------------------------
-  # Build & Push — backend and agent in parallel
-  # Frontend goes to Vercel directly (no Docker needed)
+  # Build & Push — frontend, backend, agent in parallel
   # ------------------------------------------
   build:
     name: Build & Push → ${{ matrix.service }}
@@ -35,15 +34,20 @@ jobs:
       fail-fast: true
       matrix:
         include:
+          - service: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+            build-args: |
+              NEXT_PUBLIC_API_URL=${{ secrets.PRODUCTION_API_URL }}/api/v1
+              NEXT_PUBLIC_AGENT_URL=${{ secrets.PRODUCTION_AGENT_URL }}
           - service: backend
             context: ./backend
             dockerfile: ./backend/Dockerfile
+            build-args: ''
           - service: agent
             context: ./agent
             dockerfile: ./agent/Dockerfile
-
-    outputs:
-      image-tag: ${{ steps.meta.outputs.version }}
+            build-args: ''
 
     steps:
       - uses: actions/checkout@v4
@@ -71,69 +75,19 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.build-args }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   # ------------------------------------------
-  # Frontend — deploy to Vercel
-  # Runs in parallel with Docker builds
+  # Deploy all services to VPS via SSH
+  # Migrations run inside Docker network via the
+  # `migrate` service in docker-compose.prod.yml
   # ------------------------------------------
-  deploy-frontend:
-    name: Deploy Frontend → Vercel
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
-          working-directory: ./frontend
-
-  # ------------------------------------------
-  # Migrations — runs AFTER new image is built,
-  # BEFORE new backend containers start
-  # ------------------------------------------
-  migrate:
-    name: Run DB Migrations
+  deploy:
+    name: Deploy → VPS
     runs-on: ubuntu-latest
     needs: build
-    environment: production
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Cache backend deps
-        uses: actions/cache@v4
-        with:
-          path: backend/node_modules
-          key: backend-${{ hashFiles('backend/package-lock.json') }}
-
-      - name: Install deps
-        run: npm ci
-        working-directory: ./backend
-
-      - name: Run Prisma migrations
-        run: npx prisma migrate deploy
-        working-directory: ./backend
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-  # ------------------------------------------
-  # Deploy Backend + Agent to VPS via SSH
-  # Pulls pre-built images from GHCR, rolling restart
-  # ------------------------------------------
-  deploy-backend:
-    name: Deploy Backend & Agent → VPS
-    runs-on: ubuntu-latest
-    needs: [build, migrate]
     environment: production
 
     steps:
@@ -151,39 +105,55 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
+
+            # Sync config files from repo (clone first time, pull on updates)
+            REPO_URL="https://github.com/${{ github.repository }}.git"
+            if [ -d /opt/careermate/.git ]; then
+              git -C /opt/careermate pull origin main
+            else
+              mkdir -p /opt/careermate
+              git clone "$REPO_URL" /opt/careermate
+            fi
+
             cd /opt/careermate
 
             # Authenticate with GHCR
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
             # Export new image references
+            export FRONTEND_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:sha-${{ steps.sha.outputs.short }}"
             export BACKEND_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:sha-${{ steps.sha.outputs.short }}"
             export AGENT_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-agent:sha-${{ steps.sha.outputs.short }}"
 
-            echo "Pulling $BACKEND_IMAGE"
+            echo "Pulling images..."
+            docker pull "$FRONTEND_IMAGE"
             docker pull "$BACKEND_IMAGE"
-
-            echo "Pulling $AGENT_IMAGE"
             docker pull "$AGENT_IMAGE"
 
-            # Rolling restart — docker compose replaces containers one by one
+            # Rolling restart
             docker compose -f devops/docker/docker-compose.prod.yml \
               up -d --no-build --remove-orphans \
-              backend agent
+              frontend backend agent
 
-            # Wait for backend to become healthy (up to 120s)
+            # Wait for backend (up to 120s)
             echo "Waiting for backend..."
             timeout 120 bash -c \
-              'until curl -sf http://localhost:3001/api/v1/health > /dev/null; do sleep 3; done' \
+              'until curl -sf http://localhost/api/v1/health > /dev/null; do sleep 3; done' \
               || { echo "Backend health check timed out"; exit 1; }
 
-            # Wait for agent to become healthy (up to 60s)
+            # Wait for agent (up to 60s)
             echo "Waiting for agent..."
             timeout 60 bash -c \
-              'until curl -sf http://localhost:3002/health > /dev/null; do sleep 3; done' \
+              'until curl -sf http://localhost/ai/health > /dev/null; do sleep 3; done' \
               || { echo "Agent health check timed out"; exit 1; }
 
-            # Clean up dangling images (project-scoped only)
+            # Wait for frontend (up to 60s)
+            echo "Waiting for frontend..."
+            timeout 60 bash -c \
+              'until curl -sf http://localhost/api/health > /dev/null; do sleep 3; done' \
+              || { echo "Frontend health check timed out"; exit 1; }
+
+            # Clean up dangling images
             docker image prune -f --filter "dangling=true"
 
             echo "Deploy complete ✓"
@@ -194,7 +164,7 @@ jobs:
   smoke-test:
     name: Smoke Tests
     runs-on: ubuntu-latest
-    needs: [deploy-frontend, deploy-backend]
+    needs: deploy
     if: ${{ !inputs.skip_tests }}
 
     steps:
@@ -213,9 +183,16 @@ jobs:
 
       - name: Check Frontend
         run: |
-          curl -sf --max-time 15 "${{ secrets.PRODUCTION_FRONTEND_URL }}" \
-            || { echo "Frontend smoke test failed"; exit 1; }
-          echo "Frontend is healthy ✓"
+          for i in $(seq 1 6); do
+            echo "Attempt $i..."
+            if curl -sf --max-time 10 "${{ secrets.PRODUCTION_API_URL }}/api/health"; then
+              echo "Frontend is healthy ✓"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Frontend smoke test failed after retries"
+          exit 1
 
       - name: Notify success
         if: success()

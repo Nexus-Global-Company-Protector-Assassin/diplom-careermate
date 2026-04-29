@@ -7,6 +7,7 @@ import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
 import { Button } from '@/shared/ui/button';
 import { useLogin } from '@/features/auth/api/use-auth';
+import { GoogleButton } from './google-button';
 
 const loginSchema = z.object({
   email: z.string().email('Введите корректный email'),
@@ -28,7 +29,19 @@ export function LoginForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" autoComplete="on">
+    <div className="flex flex-col gap-4">
+      <GoogleButton label="Войти через Google" />
+
+      <div className="relative my-1">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-border" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">или email</span>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" autoComplete="on">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="login-email">Email</Label>
         <Input
@@ -69,5 +82,6 @@ export function LoginForm() {
         {login.isPending ? 'Вход...' : 'Войти'}
       </Button>
     </form>
+    </div>
   );
 }

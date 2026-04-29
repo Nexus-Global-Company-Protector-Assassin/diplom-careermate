@@ -10,6 +10,10 @@ import { ApiError, toastMessageForError } from '@/shared/lib/api-errors';
 
 type LoginInput = { email: string; password: string };
 type RegisterInput = { email: string; password: string };
+type RequestCodeInput = { email: string; password: string };
+type VerifyCodeInput = { email: string; code: string };
+type ResendCodeInput = { email: string };
+type CodeRequestResponse = { message: string; expiresInSeconds: number };
 
 export function useLogin() {
   const router = useRouter();
@@ -51,6 +55,50 @@ export function useRegister() {
           ? 'Пользователь с таким email уже существует'
           : toastMessageForError(error) || 'Не удалось зарегистрироваться';
       toast.error(msg);
+    },
+  });
+}
+
+export function useRequestRegisterCode() {
+  return useMutation({
+    mutationFn: ({ email, password }: RequestCodeInput) =>
+      api.post<CodeRequestResponse>('/auth/register/request-code', { email, password }),
+    onError: (error: unknown) => {
+      const msg =
+        error instanceof ApiError && error.status === 409
+          ? 'Пользователь с таким email уже существует'
+          : toastMessageForError(error) || 'Не удалось отправить код';
+      toast.error(msg);
+    },
+  });
+}
+
+export function useVerifyRegisterCode() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ email, code }: VerifyCodeInput) =>
+      api.post<AuthResponseDto>('/auth/register/verify', { email, code }),
+    onSuccess: (data) => {
+      queryClient.clear();
+      setTokens(data.access_token, data.refresh_token);
+      toast.success('Email подтверждён');
+      router.push('/dashboard');
+    },
+    onError: (error: unknown) => {
+      toast.error(toastMessageForError(error) || 'Неверный код');
+    },
+  });
+}
+
+export function useResendRegisterCode() {
+  return useMutation({
+    mutationFn: ({ email }: ResendCodeInput) =>
+      api.post<CodeRequestResponse>('/auth/register/resend-code', { email }),
+    onSuccess: () => toast.success('Код отправлен повторно'),
+    onError: (error: unknown) => {
+      toast.error(toastMessageForError(error) || 'Не удалось отправить код');
     },
   });
 }

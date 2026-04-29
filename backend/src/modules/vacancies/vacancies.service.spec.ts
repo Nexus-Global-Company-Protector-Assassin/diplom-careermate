@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { VacanciesService } from './vacancies.service';
+import { VacanciesService, normalizePositionForSearch } from './vacancies.service';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { HttpService } from '@nestjs/axios';
@@ -138,6 +138,56 @@ const makeConfig = (overrides: Record<string, string> = {}) => ({
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+describe('normalizePositionForSearch', () => {
+    it('strips "Студент курса" prefix and quotes', () => {
+        expect(normalizePositionForSearch('Студент курса "Data Scientist"')).toBe('Data Scientist');
+    });
+
+    it('strips smart quotes «»', () => {
+        expect(normalizePositionForSearch('Студент курса «Data Scientist»')).toBe('Data Scientist');
+    });
+
+    it('strips "Обучаюсь на" prefix', () => {
+        expect(normalizePositionForSearch('Обучаюсь на Frontend Developer')).toBe('Frontend Developer');
+    });
+
+    it('strips "Учусь на" prefix', () => {
+        expect(normalizePositionForSearch('Учусь на ML Engineer')).toBe('ML Engineer');
+    });
+
+    it('takes first chunk before slash', () => {
+        expect(normalizePositionForSearch('Backend разработчик / Node.js')).toBe('Backend разработчик');
+    });
+
+    it('passes clean role through unchanged', () => {
+        expect(normalizePositionForSearch('Senior React Developer')).toBe('Senior React Developer');
+    });
+
+    it('returns empty string for null/undefined/empty', () => {
+        expect(normalizePositionForSearch(null)).toBe('');
+        expect(normalizePositionForSearch(undefined)).toBe('');
+        expect(normalizePositionForSearch('')).toBe('');
+    });
+
+    it('falls back to known-role scan for very long messy strings', () => {
+        const out = normalizePositionForSearch(
+            'Я только начал курс и я хочу стать настоящим Data Scientist в будущем как мой кумир',
+        );
+        expect(out.toLowerCase()).toContain('data scientist');
+    });
+
+    it('collapses extra whitespace', () => {
+        expect(normalizePositionForSearch('Студент    курса    "Backend Developer"')).toBe(
+            'Backend Developer',
+        );
+    });
+
+    it('strips English aspiring/learning prefixes', () => {
+        expect(normalizePositionForSearch('Aspiring Data Engineer')).toBe('Data Engineer');
+        expect(normalizePositionForSearch('Learning Backend Developer')).toBe('Backend Developer');
+    });
+});
+
 describe('VacanciesService', () => {
     let service: VacanciesService;
     let prisma: ReturnType<typeof makePrisma>;
@@ -192,16 +242,35 @@ describe('VacanciesService', () => {
             });
         });
 
-        it('should filter by searchQuery when query is provided', async () => {
+        it('should filter by searchQuery / title / employer / descriptionPreview when query is provided', async () => {
             prisma.vacancy.findMany.mockResolvedValue([mockVacancy]);
 
             await service.getVacancies({ query: 'Frontend', limit: 10 });
 
-            expect(prisma.vacancy.findMany).toHaveBeenCalledWith({
-                where: { searchQuery: { contains: 'Frontend', mode: 'insensitive' } },
-                orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
-                take: 10,
-            });
+            const call = prisma.vacancy.findMany.mock.calls[0][0];
+            expect(call.take).toBe(10);
+            expect(call.orderBy).toEqual([{ publishedAt: 'desc' }, { createdAt: 'desc' }]);
+            const orClauses = call.where.AND[0].OR;
+            // Must include searchQuery, title, employer and descriptionPreview matches against the full query
+            expect(orClauses).toEqual(
+                expect.arrayContaining([
+                    { searchQuery: { contains: 'Frontend', mode: 'insensitive' } },
+                    { title: { contains: 'Frontend', mode: 'insensitive' } },
+                    { employer: { contains: 'Frontend', mode: 'insensitive' } },
+                    { descriptionPreview: { contains: 'Frontend', mode: 'insensitive' } },
+                ]),
+            );
+        });
+
+        it('should NOT use Prisma `hasSome` on the JSON `skills` column', async () => {
+            // skills is `Json?` in the schema — `hasSome` is invalid and causes
+            // PrismaClientValidationError. Make sure the where clause never uses it.
+            prisma.vacancy.findMany.mockResolvedValue([]);
+            await service.getVacancies({ query: 'backend' });
+
+            const call = prisma.vacancy.findMany.mock.calls[0][0];
+            const json = JSON.stringify(call);
+            expect(json).not.toContain('hasSome');
         });
 
         it('should respect custom limit', async () => {

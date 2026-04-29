@@ -10,7 +10,7 @@
 **Монорепо** со следующими модулями:
 - `frontend/` — Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS, shadcn/ui, TanStack Query, NextAuth.js. Порт **:3000**
 - `backend/` — NestJS + TypeScript, PostgreSQL + Prisma ORM, Redis + BullMQ, JWT + Passport. Порт **:3001**
-- `agent/` — AI-агент (NestJS + LangChain + Pinecone). Порт **:3002** (`NEXT_PUBLIC_AGENT_URL`)
+- `agent/` — AI-агент (NestJS + LangChain + Qdrant). Порт **:3002** (`NEXT_PUBLIC_AGENT_URL`)
 - `data-parsers/hh_parser/` — парсер вакансий с hh.ru (Python)
 - `devops/` — Docker, CI/CD конфиги
 - `docs/` — документация
@@ -60,8 +60,8 @@ Standalone CL теперь вызывает `aiService.generateCoverLetter()` с
 ## 🐳 DevOps & CI/CD (переработано 2026-04-24)
 
 ### Стратегия деплоя
-- **Frontend** → Vercel (автодеплой через `deploy.yml` на push в `main`)
-- **Backend + Agent** → VPS через SSH, Docker Compose с образами из GHCR
+- **Все сервисы** → VPS через SSH, Docker Compose с образами из GHCR (frontend + backend + agent + postgres + redis)
+- nginx на порту 80 роутит: `/` → frontend:3000, `/api/*` → backend:3001, `/auth/*` → backend:3001, `/ai/*` → agent:3002
 - **Инфра** → `devops/docker/docker-compose.prod.yml` (только `image:`, без `build:`)
 - **Dev** → `docker-compose.yml` в корне (postgres, redis, minio, mailhog, agent)
 
@@ -297,18 +297,49 @@ ML_SHADOW_MODE=true                     # false = использовать ML sc
 - Включить ML-ранжирование: поставить `ML_SHADOW_MODE=false` + `ML_SERVICE_URL=http://ml-service:3003`
 - Обучение: `python -m src.training.trainer --min-samples 500` (нужно ~500 взаимодействий)
 
+### Dev environment fixes (2026-04-28) ✅
+- **Backend startup** — добавлен `JWT_REFRESH_SECRET` в `.env` и `backend/.env` (был только в `.env.example`). Без него `RtStrategy` падал с `Configuration key "JWT_REFRESH_SECRET" does not exist`, NestJS не стартовал → фронт получал `ERR_CONNECTION_REFUSED` на `/auth/login`
+- **Stale tsbuildinfo** — `nest start --watch` мог показывать ложные TS-ошибки (`embeddings.service.ts: QdrantVectorStore`) из-за устаревшего `backend/tsconfig.tsbuildinfo`. Свежий `tsc --noEmit` проходит чисто. При зависших ошибках компиляции в watch-режиме — удалить `*.tsbuildinfo`
+- **Create-resume questions schema** — `ResumeQuestionSchema.id`: `z.string()` → `z.coerce.string().optional()`. LLM (gemini-fast) возвращал `id` как число или вообще пропускал поле. Без coerce Zod падал с "Expected string, received number"; с coerce без optional `String(undefined)` давал литерал `"undefined"` для всех вопросов → React `key={undefined}` дубликаты. Решение: optional + post-обработка в `CreateResumeTool.generateQuestions` — назначает `q1, q2, ...` если LLM вернул пустой/повторяющийся id. Тесты: `agent/src/agent/schemas/create-resume.schema.spec.ts` (3 кейса)
+- **Auto-refresh access token** — `frontend/src/shared/api/api-client.ts`. JWT access живёт 15 мин, refresh — 7 дней, но фронт раньше не обновлял access автоматически → через 15 мин любой запрос к backend возвращал 401, всплывал toast "Сессия истекла", сгенерированное резюме не сохранялось (`POST /resumes` падал). Теперь при 401 (кроме `/auth/login|register|refresh|logout`) ApiClient вызывает `POST /auth/refresh` с refresh-token Bearer, сохраняет новые токены и **повторяет** оригинальный запрос. Singleton `refreshPromise` исключает гонки при параллельных 401. Если refresh тоже не прошёл — `clearSessionAndRedirect()` чистит токены и редиректит на `/`
+
+### Resume preview & contacts fix (2026-04-29) ✅
+- **Preview modal off-screen** — `frontend/src/features/resume/resume-content.tsx`. Модал «Просмотр» резюме (`previewModalOpen`) не имел `max-h`/`overflow-y-auto`, длинный контент уходил за viewport. Добавлено `max-h-[90vh] overflow-hidden flex flex-col` на `DialogContent` + `flex-1 overflow-y-auto min-h-0` на внутренний контейнер + `break-words` на блок текста.
+- **Email/phone не попадали в сгенерированное резюме** — agent's `ProfileData` (analyze-profile.tool.ts) расширен полями `email`, `phone`, `location`, `linkedinUrl`, `githubUrl`, `portfolioUrl`, `telegram`. `CreateResumeTool.buildProfileContext` теперь рендерит отдельный блок `Контакты:` с явным перечислением, промпт инструктирован использовать ТОЛЬКО переданные контакты (не выдумывать). Frontend `buildProfileForAgent` декодирует email из JWT `access_token`, прокидывает `phone/location/linkedin/github/portfolio` напрямую и парсит `Telegram:`/`GitHub:`/`Email:` из старого `aboutMe`-формата (где данные хранились конкатенированной строкой).
+- **Тесты**: `agent/src/agent/tools/create-resume.tool.spec.ts` — 5 кейсов на `buildProfileContext` (контакты, partial-fields, omit-when-empty, aboutMe-separation).
+
+### Email verification + Google OAuth (2026-04-29) ✅
+- **Регистрация по коду** — двухшаговый процесс: `POST /auth/register/request-code` (создаёт `EmailVerificationCode` с `codeHash` + `passwordHash`, отправляет 6-значный код через Resend, 60s cooldown между запросами) → `POST /auth/register/verify` (сверяет код, создаёт `User` с `emailVerified=true`, возвращает JWT). Пользователь не создаётся пока код не подтверждён → нет orphan-юзеров. TTL кода 10 мин, lockout после 5 неверных попыток.
+- **Resend интеграция** — `MailService` (`backend/src/modules/mail/`), HTML-шаблон с градиентом, fallback в dev: если `RESEND_API_KEY` пустой или равен placeholder `your-resend-api-key` — код логируется в консоль вместо отправки. From: `CareerMate <onboarding@resend.dev>`.
+- **Google OAuth** — `passport-google-oauth20` стратегия (`auth/strategies/google.strategy.ts`), эндпоинты `GET /auth/google` (редирект на Google) → `GET /auth/google/callback` (callback, выдаёт токены). `handleGoogleAuth` ищет пользователя по `oauthId`, потом по email (link существующего email-аккаунта), иначе создаёт нового с `emailVerified=true`. Токены передаются на фронт через URL fragment (`#at=...&rt=...`) — не попадают в server logs.
+- **Frontend** — `RegisterForm` переписан на 2 шага (credentials → 6-digit OTP input с `autoComplete="one-time-code"`, 60s resend countdown). `LoginForm` и `RegisterForm` оба показывают `GoogleButton` сверху с разделителем "или email". Новая страница `/auth/callback` парсит hash, сохраняет токены, редиректит на `/dashboard`.
+- **Prisma** — `User.emailVerified Boolean @default(false)` (существующие юзеры авто-помечены `true` в миграции), новая модель `EmailVerificationCode` (`id, email, codeHash, passwordHash, expiresAt, attempts, used, createdAt`, индекс по `[email, used, expiresAt]`). Миграция `20260429000001_add_email_verification` применена.
+- **Env vars (новые)** — `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`, `FRONTEND_URL`. Шаблоны в `.env.example`.
+- **Тесты** — 14 кейсов в `auth.service.spec.ts` (request-code: cooldown, password hashing, normalization, invalidation; verify-code: expired, wrong code attempts, lockout, race condition; Google OAuth: new user / existing oauthId / link to email-password account) + 3 кейса в `mail.service.spec.ts` (dev mode logging, placeholder key detection, HTML build). Все 17 тестов зелёные.
+
 ### MVP Cleanup (2026-04-28) ✅
 - **Избранные вакансии** — `FavoriteVacancy` модель в Prisma (миграция `20260428000001_add_favorite_vacancy`), `GET/POST /vacancies/favorites` с реальным toggle, оптимистичные обновления на фронте через React Query
 - **Responses/Applications** — полностью вырезаны: эндпоинты убраны из контроллера, UI (кнопка "Откликнуться", applyModal, таблица откликов) убраны, аналитика переключена на favorites
 - **Career Goal** — `saveGoal()` теперь сохраняет в БД через `PUT /profiles/me` (поля `desiredPosition`, `location`, `desiredSalaryMin`, `experienceYears`), loading state на кнопке
 - **Analytics** — achievement "Активный соискатель" → "Исследователь" (10 избранных), weekly report теперь считает favorites вместо responses, career progress "Отклики идут" → "Вакансии сохранены"
 
+### Production deployment (2026-04-29) ✅
+- **nginx.conf** переписан: HTTP-only (port 80), без SSL/домена, без frontend upstream (он на Vercel). Маршруты: `/api/*` → backend:3001, `/auth/*` → backend:3001, `/ai/*` → agent:3002
+- **docker-compose.prod.yml** дополнен всеми недостающими env vars: `JWT_REFRESH_SECRET`, `RESEND_API_KEY`, Google OAuth, `QDRANT_URL/API_KEY/COLLECTION`, `NEO4J_URI/USER/PASSWORD/DATABASE`, `CORS_ORIGIN`, `FRONTEND_URL`, `REDIS_URL` для агента, `AGENT_PORT: 3002`
+- **PINECONE → Qdrant**: удалён `PINECONE_API_KEY` из backend в docker-compose.prod.yml
+- **AGENT_PORT баг**: агент использовал `AGENT_PORT`, а docker-compose передавал `PORT` → агент стартовал на 3003 вместо 3002. Исправлено: `AGENT_PORT: 3002`
+- **Agent health endpoint**: `POST /ai/health` не совпадал с деплой-скриптами (GET /health). Добавлен `agent/src/health.controller.ts` с `GET /health` и зарегистрирован в AppModule
+- **deploy.yml**: добавлены `NEXT_PUBLIC_API_URL` и `NEXT_PUBLIC_AGENT_URL` в Vercel-деплой через `env:`
+- **Создан** `.env.production.example` — полный шаблон для сервера
+- **Создан** `devops/scripts/setup-vps.sh` — скрипт первоначальной настройки Ubuntu VPS
+- **Обновлён** `devops/README.md` — пошаговая инструкция первого деплоя
+
 ### Планируется 📌
 - **Password reset** — отложено, нет email-сервиса
 - **Phase 2 training** — после накопления 500+ взаимодействий запустить первое обучение LightGBM
 - **RecommendationImpression логирование** ✅ уже есть — данные накапливаются
 - Исправить pre-existing TypeScript ошибки (fileKey, publishedAt в Prisma)
-- Заполнить реальные значения `IMAGE_PREFIX` в docker-compose.prod.yml после настройки GHCR
+- Подключить домен + SSL (Let's Encrypt) после регистрации домена — обновить nginx.conf и Google OAuth callback
 
 ---
 
@@ -404,4 +435,4 @@ dimensions: archetype, salary_band, work_format, seniority
 
 ---
 
-*Последнее обновление: 2026-04-25*
+*Последнее обновление: 2026-04-29*

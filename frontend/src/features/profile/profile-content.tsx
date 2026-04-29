@@ -207,6 +207,20 @@ export function ProfileContent() {
     managementStyle: '',
   })
 
+  // Email comes from JWT (not stored on Profile), load it independently of profileData
+  // so it shows up for fresh Google-OAuth users who don't have a profile row yet.
+  useEffect(() => {
+    try {
+      const token = getAccessToken()
+      if (!token) return
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      const emailFromToken = payload.email || ''
+      if (emailFromToken) {
+        setPersonalData(p => (p.email ? p : { ...p, email: emailFromToken }))
+      }
+    } catch { /* ignore */ }
+  }, [])
+
   // Load from database on mount
   useEffect(() => {
     if (profileData) {

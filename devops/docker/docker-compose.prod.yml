@@ -4,6 +4,8 @@ version: '3.8'
 #   BACKEND_IMAGE=ghcr.io/your-org/careermate-backend:sha-abc1234
 #   AGENT_IMAGE=ghcr.io/your-org/careermate-agent:sha-abc1234
 # Or just use :latest tags if you always want the newest build.
+#
+# All secrets are read from .env.production (never committed to git).
 
 services:
 
@@ -34,17 +36,69 @@ services:
       - "3001"
     environment:
       NODE_ENV: production
+
+      # Database
       DATABASE_URL: ${DATABASE_URL}
+
+      # Redis
       REDIS_URL: ${REDIS_URL}
+
+      # JWT
       JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION:-15m}
+      JWT_REFRESH_TOKEN_EXPIRATION: ${JWT_REFRESH_TOKEN_EXPIRATION:-7d}
+
+      # Google OAuth
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+
+      # Email (Resend)
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-CareerMate <onboarding@resend.dev>}
+
+      # CORS
+      CORS_ORIGIN: ${CORS_ORIGIN}
+
+      # LLM (Polza.ai / OpenAI-compatible)
+      LLM_API_BASE_URL: ${LLM_API_BASE_URL}
       LLM_API_KEY: ${LLM_API_KEY}
-      PINECONE_API_KEY: ${PINECONE_API_KEY}
-      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT}
-      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY}
-      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY}
-      STORAGE_BUCKET: ${STORAGE_BUCKET}
+      LLM_MODEL_NAME: ${LLM_MODEL_NAME:-gpt-4o}
+      LLM_MODEL_NAME_FAST: ${LLM_MODEL_NAME_FAST:-gpt-4o-mini}
+      LLM_MODEL_NAME_SMART: ${LLM_MODEL_NAME_SMART:-gpt-4o}
+      EMBEDDINGS_MODEL_NAME: ${EMBEDDINGS_MODEL_NAME:-text-embedding-3-small}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-60000}
+      AI_MAX_RETRIES: ${AI_MAX_RETRIES:-3}
+
+      # Qdrant vector search
+      QDRANT_URL: ${QDRANT_URL}
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-careermate-vacancies}
+
+      # Neo4j Knowledge Graph (AuraDB cloud)
+      NEO4J_URI: ${NEO4J_URI:-}
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-}
+      NEO4J_DATABASE: ${NEO4J_DATABASE:-neo4j}
+
+      # Object Storage (S3 / R2 / MinIO)
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-}
+
+      # Job board APIs
       ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
       ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
+      ADZUNA_COUNTRY: ${ADZUNA_COUNTRY:-gb}
+
+      # Freemium quotas
+      QUOTA_AI_DAILY: ${QUOTA_AI_DAILY:-10}
+      QUOTA_RESUMES: ${QUOTA_RESUMES:-3}
+      QUOTA_QUIZ: ${QUOTA_QUIZ:-3}
+
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -71,9 +125,21 @@ services:
       - "3002"
     environment:
       NODE_ENV: production
-      PORT: 3002
+      AGENT_PORT: 3002
+
+      # LLM
+      LLM_API_BASE_URL: ${LLM_API_BASE_URL}
       LLM_API_KEY: ${LLM_API_KEY}
-      PINECONE_API_KEY: ${PINECONE_API_KEY}
+      LLM_MODEL_NAME: ${LLM_MODEL_NAME:-gpt-4o}
+      LLM_MODEL_NAME_FAST: ${LLM_MODEL_NAME_FAST:-gpt-4o-mini}
+      LLM_MODEL_NAME_SMART: ${LLM_MODEL_NAME_SMART:-gpt-4o}
+
+      # Redis cache
+      REDIS_URL: ${REDIS_URL}
+
+      # Pinecone (legacy, kept for backwards compat — Qdrant is primary)
+      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
+
     depends_on:
       - backend
     networks:
@@ -87,7 +153,33 @@ services:
           memory: 256m
 
   # ------------------------------------------
-  # Nginx — reverse proxy + SSL termination
+  # Frontend (Next.js)
+  # ------------------------------------------
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/change-me/careermate-frontend:latest}
+    container_name: careermate-frontend
+    restart: always
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      HOSTNAME: "0.0.0.0"
+      PORT: 3000
+    depends_on:
+      - backend
+    networks:
+      - careermate-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+        reservations:
+          memory: 128m
+
+  # ------------------------------------------
+  # Nginx — reverse proxy
+  # HTTP only until domain + SSL are configured
   # ------------------------------------------
   nginx:
     image: nginx:alpine
@@ -95,11 +187,10 @@ services:
     restart: always
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - nginx_ssl:/etc/nginx/ssl:ro
     depends_on:
+      - frontend
       - backend
       - agent
     networks:
@@ -117,7 +208,6 @@ services:
     image: postgres:16-alpine
     container_name: careermate-postgres
     restart: always
-    # No ports: — DB accessible only within careermate-network
     expose:
       - "5432"
     environment:
@@ -148,7 +238,6 @@ services:
     image: redis:7-alpine
     container_name: careermate-redis
     restart: always
-    # No ports: — Redis accessible only within careermate-network
     expose:
       - "6379"
     command: >
@@ -177,8 +266,6 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  nginx_ssl:
     driver: local
 
 networks:

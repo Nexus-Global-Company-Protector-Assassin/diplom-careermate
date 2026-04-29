@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Схема вопроса от AI для уточнения данных профиля
  */
 export const ResumeQuestionSchema = z.object({
-    id: z.string().describe('Уникальный идентификатор вопроса (например q1, q2)'),
+    id: z.coerce.string().optional().describe('Уникальный идентификатор вопроса (например q1, q2). Нормализуется в tool, если LLM не вернул'),
     category: z.enum(['experience', 'skills', 'education', 'personal', 'achievements'])
         .describe('Категория вопроса'),
     question: z.string().describe('Текст наводящего вопроса на русском языке'),

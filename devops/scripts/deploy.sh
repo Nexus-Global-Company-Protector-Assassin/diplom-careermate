@@ -60,8 +60,8 @@ docker compose -f "$COMPOSE_FILE" run --rm migrate
 log_success "Migrations complete"
 
 # Rolling restart of app services (keeps nginx + DB running)
-log_info "Restarting backend and agent..."
-docker compose -f "$COMPOSE_FILE" up -d --no-build --remove-orphans backend agent
+log_info "Restarting frontend, backend and agent..."
+docker compose -f "$COMPOSE_FILE" up -d --no-build --remove-orphans frontend backend agent
 
 # Health check with polling (no sleep guessing)
 wait_healthy() {
@@ -79,8 +79,9 @@ wait_healthy() {
     log_success "$name is healthy"
 }
 
-wait_healthy "backend" "http://localhost:3001/api/v1/health" 90
-wait_healthy "agent"   "http://localhost:3002/health"         60
+wait_healthy "backend"  "http://localhost/api/v1/health" 90
+wait_healthy "agent"    "http://localhost/ai/health"     60
+wait_healthy "frontend" "http://localhost/api/health"    60
 
 # Cleanup old/dangling images (scoped — won't nuke other projects)
 log_info "Cleaning up dangling images..."

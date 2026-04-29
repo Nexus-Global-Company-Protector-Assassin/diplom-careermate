@@ -212,6 +212,64 @@ function calcMatch(
 
 
 
+/**
+ * Extract a clean job role from a noisy desiredPosition string.
+ * Examples:
+ *   'Студент курса "Data Scientist"' → 'Data Scientist'
+ *   'Обучаюсь на Frontend Developer' → 'Frontend Developer'
+ *   'Backend разработчик / Node.js' → 'Backend разработчик'
+ *   'Senior React Developer' → 'Senior React Developer' (passes through)
+ */
+export function normalizePositionForSearch(raw: string | null | undefined): string {
+    if (!raw) return '';
+    let s = String(raw).trim();
+
+    // Strip surrounding quotes
+    s = s.replace(/[«»"'']/g, ' ');
+
+    // Strip noisy prefixes (Russian + English)
+    const prefixPatterns = [
+        /^студент\s+курса\s+/i,
+        /^студент\s+/i,
+        /^обуча(ю|ем)сь\s+на\s+/i,
+        /^учусь\s+на\s+/i,
+        /^курс\s+/i,
+        /^хочу\s+(стать|быть)\s+/i,
+        /^ищу\s+работу\s+(?:как\s+|в\s+роли\s+)?/i,
+        /^aspiring\s+/i,
+        /^junior\s+student\s+/i,
+        /^learning\s+/i,
+    ];
+    for (const re of prefixPatterns) {
+        s = s.replace(re, '');
+    }
+
+    // If there's a slash/comma — take only the first chunk (most specific role)
+    s = s.split(/[\/,|]/)[0].trim();
+
+    // Collapse whitespace
+    s = s.replace(/\s+/g, ' ').trim();
+
+    // Final fallback — known role keyword scan
+    if (s.length === 0 || s.split(/\s+/).length > 6) {
+        const knownRoles = [
+            'data scientist', 'data analyst', 'data engineer',
+            'machine learning engineer', 'ml engineer',
+            'frontend developer', 'backend developer', 'fullstack developer',
+            'mobile developer', 'devops engineer', 'qa engineer', 'test engineer',
+            'product manager', 'project manager',
+            'react developer', 'vue developer', 'node.js developer', 'python developer',
+            'designer', 'ui/ux designer',
+        ];
+        const lower = String(raw).toLowerCase();
+        for (const role of knownRoles) {
+            if (lower.includes(role)) return role.replace(/\b\w/g, c => c.toUpperCase());
+        }
+    }
+
+    return s;
+}
+
 function mapSchedule(contractType?: string, contractTime?: string): string | null {
     const type = (contractType || '').toLowerCase();
     const time = (contractTime || '').toLowerCase();
@@ -258,29 +316,42 @@ export class VacanciesService {
 
         const { query, salaryFrom, salaryTo, remote, experience, limit = 20 } = filters;
 
-        const where: any = {};
+        const andClauses: any[] = [];
 
         if (query) {
-            where.searchQuery = { contains: query, mode: 'insensitive' };
+            // Broaden match: hit if any of searchQuery / title / employer / descriptionPreview
+            // matches the query (or any of its tokens). `skills` is a Json column — array
+            // membership cannot be queried via Prisma directly, so we rely on token matches
+            // against title / searchQuery / descriptionPreview, which already cover the keywords.
+            const tokens = query
+                .split(/[\s,;\-_/]+/)
+                .map(t => t.trim())
+                .filter(t => t.length > 2);
+            const queryOr: any[] = [
+                { searchQuery: { contains: query, mode: 'insensitive' } },
+                { title: { contains: query, mode: 'insensitive' } },
+                { employer: { contains: query, mode: 'insensitive' } },
+                { descriptionPreview: { contains: query, mode: 'insensitive' } },
+            ];
+            for (const t of tokens) {
+                queryOr.push({ title: { contains: t, mode: 'insensitive' } });
+                queryOr.push({ searchQuery: { contains: t, mode: 'insensitive' } });
+                queryOr.push({ descriptionPreview: { contains: t, mode: 'insensitive' } });
+            }
+            andClauses.push({ OR: queryOr });
         }
 
-        if (salaryFrom !== undefined) {
-            where.salaryFrom = { gte: salaryFrom };
-        }
-
-        if (salaryTo !== undefined) {
-            where.salaryTo = { lte: salaryTo };
-        }
-
-        if (filters.location) {
-            where.location = { contains: filters.location, mode: 'insensitive' };
-        }
+        if (salaryFrom !== undefined) andClauses.push({ salaryFrom: { gte: salaryFrom } });
+        if (salaryTo !== undefined) andClauses.push({ salaryTo: { lte: salaryTo } });
+        if (filters.location) andClauses.push({ location: { contains: filters.location, mode: 'insensitive' } });
 
         if (remote === true) {
-            where.OR = [
-                { schedule: { contains: 'удал', mode: 'insensitive' } },
-                { location: { contains: 'удал', mode: 'insensitive' } },
-            ];
+            andClauses.push({
+                OR: [
+                    { schedule: { contains: 'удал', mode: 'insensitive' } },
+                    { location: { contains: 'удал', mode: 'insensitive' } },
+                ],
+            });
         }
 
         if (experience && experience !== 'any') {
@@ -291,9 +362,11 @@ export class VacanciesService {
                 '6+': 'От 6 лет',
             };
             if (expMap[experience]) {
-                where.experience = { contains: expMap[experience].split(' ')[0], mode: 'insensitive' };
+                andClauses.push({ experience: { contains: expMap[experience].split(' ')[0], mode: 'insensitive' } });
             }
         }
+
+        const where = andClauses.length > 0 ? { AND: andClauses } : {};
 
         return this.prisma.vacancy.findMany({
             where,
@@ -313,16 +386,35 @@ export class VacanciesService {
         salary?: number,
         userId?: string,
     ): Promise<any[]> {
-        // Check if we have enough vacancies for this position in DB
-        const existing = await this.prisma.vacancy.count({
-            where: { searchQuery: { contains: position, mode: 'insensitive' } },
-        });
+        // Normalize messy profile.desiredPosition (e.g. 'Студент курса "Data Scientist"' → 'Data Scientist')
+        // before using it for Adzuna search and DB matching.
+        const cleanPosition = normalizePositionForSearch(position) || position;
+        if (cleanPosition !== position) {
+            this.logger.log(`[Recommended] Normalized position: "${position}" → "${cleanPosition}"`);
+        }
+
+        // Check if we have enough vacancies for this position in DB —
+        // match across searchQuery / title to catch records saved under any spelling.
+        const tokens = cleanPosition.split(/\s+/).filter(t => t.length > 2);
+        const matchAny: any = tokens.length > 0
+            ? {
+                OR: [
+                    { searchQuery: { contains: cleanPosition, mode: 'insensitive' } },
+                    { title: { contains: cleanPosition, mode: 'insensitive' } },
+                    ...tokens.flatMap(t => [
+                        { searchQuery: { contains: t, mode: 'insensitive' } },
+                        { title: { contains: t, mode: 'insensitive' } },
+                    ]),
+                ],
+            }
+            : {};
+        const existing = await this.prisma.vacancy.count({ where: matchAny });
 
         // Auto-fetch if DB is sparse for this search
-        if (existing < 5 && position) {
-            this.logger.log(`[Recommended] DB sparse (${existing} rows) for "${position}", auto-fetching from Adzuna`);
+        if (existing < 5 && cleanPosition) {
+            this.logger.log(`[Recommended] DB sparse (${existing} rows) for "${cleanPosition}", auto-fetching from Adzuna`);
             try {
-                await this.searchAndSave(position, 10);
+                await this.searchAndSave(cleanPosition, 10);
             } catch {
                 this.logger.warn('[Recommended] Auto-fetch failed, using available data');
             }
@@ -333,15 +425,13 @@ export class VacanciesService {
         await this.cleanupExpiredVacancies();
 
         const dbVacancies: any[] = await this.prisma.vacancy.findMany({
-            where: position
-                ? { searchQuery: { contains: position, mode: 'insensitive' } }
-                : {},
+            where: cleanPosition ? matchAny : {},
             orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
             take: 50, // fetch wider set, rank by match
         });
 
         // ── Semantic re-ranking via Pinecone ─────────────────────────────────
-        const queryText = [position, ...profileSkills].filter(Boolean).join(' ');
+        const queryText = [cleanPosition, ...profileSkills].filter(Boolean).join(' ');
         const semanticRank = new Map<string, number>(); // vacancyId → normalized score 0–1
 
         try {
@@ -382,7 +472,7 @@ export class VacanciesService {
                 const matchResult = calcMatch(
                     v.title, skills, desc,
                     v.salaryFrom, v.salaryTo, v.salaryCurrency, v.salaryLabel,
-                    position, profileSkills, salary,
+                    cleanPosition, profileSkills, salary,
                     expandedSkills,
                 );
                 const matchScore = matchResult.score;

@@ -69,8 +69,8 @@ export class EmbeddingsService implements OnModuleInit {
     }
 
     async indexVacancy(id: string, text: string): Promise<void> {
-        const vectorStore = this.getVectorStore();
         try {
+            const vectorStore = this.getVectorStore();
             await vectorStore.addDocuments([
                 { pageContent: text, metadata: { vacancyId: id } },
             ]);
@@ -82,8 +82,8 @@ export class EmbeddingsService implements OnModuleInit {
     }
 
     async searchSimilar(queryText: string, topK: number): Promise<string[]> {
-        const vectorStore = this.getVectorStore();
         try {
+            const vectorStore = this.getVectorStore();
             const results = await vectorStore.similaritySearch(queryText, topK);
             return results
                 .map((doc) => doc.metadata.vacancyId)

@@ -316,7 +316,11 @@ export function VacanciesContent() {
           freshnessLabel: v.freshnessLabel,
           daysOld: v.daysOld,
         }
-      }).filter((j) => Number(j.match) > 20).sort((a, b) => Number(b.match) - Number(a.match)); // Filter junk and Sort!
+      })
+        // When user explicitly searched, show ALL results sorted by match (don't hide low-match vacancies — they may still be relevant via skills/role overlap user is exploring).
+        // For passive recommendations (no query), keep the noise filter.
+        .filter((j) => activeSearchQuery ? true : Number(j.match) > 20)
+        .sort((a, b) => Number(b.match) - Number(a.match));
       setJobs(mapped)
     }
   }, [adzunaVacancies, profile?.skills, profile?.desiredPosition])

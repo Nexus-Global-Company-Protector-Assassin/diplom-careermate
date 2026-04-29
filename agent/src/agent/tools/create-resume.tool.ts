@@ -74,6 +74,15 @@ ${profileContext}
             { model: this.llmGateway.getModels().fast, temperature: 0.4, maxTokens: 4096, timeoutMs: 60000 },
         );
 
+        const seen = new Set<string>();
+        result.data.questions = result.data.questions.map((q, idx) => {
+            const rawId = (q.id ?? '').toString().trim();
+            const candidate = rawId && rawId !== 'undefined' ? rawId : `q${idx + 1}`;
+            const uniqueId = seen.has(candidate) ? `q${idx + 1}` : candidate;
+            seen.add(uniqueId);
+            return { ...q, id: uniqueId };
+        });
+
         this.logger.log(
             `[create_resume] Generated ${result.data.questions.length} questions, missing areas: ${result.data.missingDataAreas.join(', ')}`,
         );
@@ -115,6 +124,8 @@ XYZ = "Accomplished [X] as measured by [Y] by doing [Z]"
 ═══ СТРУКТУРА (Stanford-стандарт) ═══
 1. # ФИО — крупный заголовок
 2. Контакты в одну строку: email | телефон | LinkedIn | GitHub | Telegram
+   ВАЖНО: используй ТОЛЬКО те контакты, которые явно переданы в блоке "Контакты:" профиля.
+   Не выдумывай email/телефон. Если контакт не указан — пропусти его. Если ни одного контакта нет — оставь только ФИО без строки контактов.
 3. ## PROFESSIONAL SUMMARY / О СЕБЕ
    - 3-4 предложения. Кто ты (роль + опыт), ключевые технологии, главное достижение, что ищешь.
    - Tailored под желаемую позицию.
@@ -177,7 +188,21 @@ ${answersContext}
         if (profile.fullName) lines.push(`ФИО: ${profile.fullName}`);
         if (profile.desiredPosition) lines.push(`Желаемая позиция: ${profile.desiredPosition}`);
         if (profile.experienceYears !== undefined) lines.push(`Лет опыта: ${profile.experienceYears}`);
-        if (profile.aboutMe) lines.push(`Контакты и доп. информация: ${profile.aboutMe}`);
+
+        const contacts: string[] = [];
+        if (profile.email) contacts.push(`Email: ${profile.email}`);
+        if (profile.phone) contacts.push(`Телефон: ${profile.phone}`);
+        if (profile.location) contacts.push(`Локация: ${profile.location}`);
+        if (profile.linkedinUrl) contacts.push(`LinkedIn: ${profile.linkedinUrl}`);
+        if (profile.githubUrl) contacts.push(`GitHub: ${profile.githubUrl}`);
+        if (profile.telegram) contacts.push(`Telegram: ${profile.telegram}`);
+        if (profile.portfolioUrl) contacts.push(`Портфолио: ${profile.portfolioUrl}`);
+        if (contacts.length) {
+            lines.push('\nКонтакты:');
+            for (const c of contacts) lines.push(`  - ${c}`);
+        }
+
+        if (profile.aboutMe) lines.push(`\nО себе / доп. информация: ${profile.aboutMe}`);
 
         if (profile.skills?.length) {
             lines.push(`\nНавыки: ${profile.skills.join(', ')}`);

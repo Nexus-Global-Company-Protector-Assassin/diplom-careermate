@@ -23,6 +23,13 @@ export interface ProfileData {
     }>;
     aboutMe?: string;
     careerGoals?: string;
+    email?: string;
+    phone?: string;
+    location?: string;
+    linkedinUrl?: string;
+    githubUrl?: string;
+    portfolioUrl?: string;
+    telegram?: string;
 }
 
 @Injectable()

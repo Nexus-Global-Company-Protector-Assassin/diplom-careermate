@@ -1,0 +1,229 @@
+Общий пользовательский путь: от входа до основных сценариев системы
+
+Что художнику рисовать
+- User
+- Frontend App (`MainLayout` + банер ProfileCompleteness, dashboard, profile, resume, vacancies, analytics + Career Quiz)
+- `AuthController` / `AuthService` (JWT + Passport, register/login/refresh/logout)
+- `ProfilesController` / `ProfilesService`
+- `SkillsService`
+- Agent (`AgentController`, parse / review / create / generate resume flows на :3002)
+- `PocController` / `PocService`
+- `ResumesController` / `ResumesService` (+ standalone cover letter через AiService)
+- `VacanciesController` / `VacanciesService` (recommended + interactions + interview-prep / evaluation / cover-letter)
+- `InterviewsController` / `InterviewsService` (история STAR+R)
+- `CareerAssessmentController` / `CareerAssessmentService` (quiz + CareerPathChain)
+- `AnalyticsController` / `AnalyticsService`
+- `AiService` (LangChain chains: CoverLetter, VacancyAnalysis, InterviewPrep, CareerChat, CareerPath)
+- `MlRankingService` (shadow mode → Python ml-service :3003)
+- Prisma / PostgreSQL
+- Redis (BullMQ + кэш AI-ответов)
+- MinIO / S3 (object storage для резюме)
+- Adzuna API (источник вакансий)
+- Pinecone (semantic ANN для подбора)
+- LLM API (Polza.ai / OpenAI совместимый)
+
+Ключевые entry points
+- `frontend/src/shared/api/api-client.ts:3`
+- `frontend/src/app/page.tsx:4` (RootPage → AuthPage)
+- `frontend/src/features/auth/auth-page.tsx`
+- `frontend/src/features/auth/login-form.tsx`
+- `frontend/src/features/auth/register-form.tsx`
+- `frontend/src/features/auth/api/use-auth.ts` (`useLogin`, `useRegister`, setTokens)
+- `frontend/src/widgets/layout/main-layout.tsx:20` (баннер ProfileCompleteness < 70%)
+- `frontend/src/features/onboarding/onboarding-modal.tsx`
+- `backend/src/modules/auth/auth.controller.ts:11`
+- `frontend/src/app/profile/page.tsx:4`
+- `frontend/src/features/profile/profile-content.tsx`
+- `frontend/src/features/profile/resume-import-modal.tsx` (3-шаговый импорт)
+- `frontend/src/features/profile/profile-completeness-card.tsx`
+- `backend/src/modules/profiles/profiles.controller.ts:8`
+- `backend/src/modules/poc/poc.controller.ts:7`
+- `frontend/src/features/poc/api/use-run-poc.ts`
+- `frontend/src/app/resume/page.tsx:4`
+- `frontend/src/features/resume/resume-content.tsx`
+- `frontend/src/features/resume/api/use-review-resume.ts:55` (agent /ai/review-resume)
+- `frontend/src/features/resume/api/use-create-resume.ts:61` (agent /ai/create-resume/questions, /generate)
+- `frontend/src/features/profile/api/use-upload-resume.ts:25` (agent /ai/upload-resume)
+- `backend/src/modules/resumes/resumes.controller.ts:11`
+- `frontend/src/app/vacancies/page.tsx:4`
+- `frontend/src/features/vacancies/vacancies-content.tsx`
+- `frontend/src/features/vacancies/api/use-track-interaction.ts`
+- `backend/src/modules/vacancies/vacancies.controller.ts:10`
+- `frontend/src/app/analytics/page.tsx:4`
+- `frontend/src/widgets/dashboard/dashboard-content.tsx`
+- `frontend/src/widgets/analytics/analytics-content.tsx`
+- `frontend/src/features/analytics/career-quiz-modal.tsx`
+- `frontend/src/features/analytics/career-path-result.tsx`
+- `frontend/src/features/analytics/api/use-career-assessment.ts`
+- `backend/src/modules/career-assessment/career-assessment.controller.ts`
+- `backend/src/modules/analytics/analytics.controller.ts:6`
+
+Сценарий 0. Вход / авторизация
+1. Backend поддерживает auth endpoints:
+   - `POST /api/v1/auth/register`
+   - `POST /api/v1/auth/login`
+   - `POST /api/v1/auth/refresh`
+   - `POST /api/v1/auth/logout`
+2. Frontend API client (`shared/api/api-client.ts:15`) на каждом запросе читает `access_token` из `localStorage` и добавляет `Authorization: Bearer ...`.
+3. Frontend login UI собран: `/` рендерит `AuthPage` с табами `LoginForm` и `RegisterForm` (`features/auth/auth-page.tsx`). После успешного `useLogin()` / `useRegister()` хуки сохраняют пару `access_token` + `refresh_token` через `setTokens` и роутят пользователя в защищённую часть приложения.
+4. Все защищённые контроллеры (`vacancies`, `interviews`, `career-assessment`, `profiles`, `resumes`) накрыты `JwtAuthGuard`, так что `userId` приходит из `@CurrentUser()`.
+5. Demo-fallback в `ProfilesService` (поиск первого user / создание `poc-demo@careermate.ru`) формально остаётся на случай вызовов без `userId`, но в реальном UI сейчас всегда используется реальный JWT.
+
+Сценарий 1. Первый вход в приложение и базовая навигация
+1. После логина user попадает в `MainLayout`, который монтирует:
+   - `Header`
+   - `Sidebar`
+   - `AIChat` (глобальный career-chat)
+   - `OnboardingModal` (локальный, без backend)
+   - Баннер ProfileCompleteness (показывается, если score < 70%, dismissible через sessionStorage)
+2. Dashboard (`/dashboard`) делает чтение:
+   - `GET /api/v1/analytics/weekly`
+   - `GET /api/v1/analytics/dashboard`
+3. `OnboardingModal` проверяет localStorage и при первом запуске показывает локальный onboarding без backend-запросов.
+4. Если профиль ещё не заполнен на 70%+, баннер в `MainLayout` ведёт пользователя в `/profile`. Профиль остаётся центральной точкой для всех остальных сценариев.
+
+Сценарий 2. Заполнение профиля
+1. User открывает `/profile`.
+2. `ProfileContent` делает `GET /api/v1/profiles/me`.
+3. `ProfilesService.getProfile()`:
+   - определяет `userId` из JWT
+   - ищет `profile` и связанные `analysisResults` / `profileSkills`
+   - fallback: при отсутствии `userId` берёт первого user или создаёт demo-user
+4. Если профиль найден, frontend раскладывает данные по секциям формы; рисуется `ProfileCompletenessCard` (7 полей, веса = 100).
+5. Если профиля нет — backend возвращает 404, UI остаётся в режиме пустой формы.
+6. User заполняет personal data, about, career goals, work experience, education, skills и новую карточку «Предпочтения поиска» (`workFormatPreference`, `companyTypePreference`, `managementStylePreference`).
+7. Любой Save в UI ведёт в `POST /api/v1/profiles/me` (создание) или `PUT /api/v1/profiles/me` (обновление).
+8. `ProfilesService.createProfile()` / `update()` делает `profile.upsert(...)`.
+9. Если в payload есть skills, `SkillsService.syncProfileSkills(...)`:
+   - flatten'ит `technical + professional`
+   - нормализует canonical skills
+   - пересоздаёт связи `profileSkill`
+10. После success frontend инвалидирует профиль через TanStack Query и перечитывает `GET /profiles/me`.
+
+Сценарий 3. Авто-заполнение профиля из резюме
+1. На `/profile` user открывает `ResumeImportModal` (3 шага: Upload → Preview → Success) или старый inline-uploader.
+2. Frontend POST'ит файл напрямую в agent: `POST {NEXT_PUBLIC_AGENT_URL}/ai/upload-resume`.
+3. Agent (`agent/src/agent/tools/parse-resume.tool.ts`):
+   - извлекает текст из PDF/DOCX
+   - прогоняет parse flow через LLM (fastChat, Redis-кэш по MD5(rawText), TTL 24h)
+   - возвращает структурированный `ProfileData` (включая `careerGoals?`, `aboutMe`, education, phone, location)
+4. Дальше работает smart-merge (`mapParsedToProfile`): заполняются только пустые поля, чтобы не перетереть уже введённое пользователем.
+5. В `ResumeImportModal` сохранение идёт сразу через `useUpdateProfile` → `PUT /api/v1/profiles/me`. В старом inline-flow всё ещё нужно отдельно нажимать Save.
+
+Сценарий 4. Запуск PoC-анализа после профиля
+1. User запускает PoC из профиля.
+2. Frontend собирает текущий `ProfileDto` из local state.
+3. `POST /api/v1/poc/run` уходит в backend.
+4. `PocService.runAnalysis()`:
+   - находит/создаёт user
+   - делает `profile.upsert(...)`
+   - вызывает agent `POST {AGENT_URL}/ai/poc/run`
+5. Agent выполняет multi-step flow анализа профиля, подбора вакансий и генерации резюме.
+6. Backend сохраняет результат в `analysisResult`.
+7. Frontend после success делает `router.push("/poc/result")`.
+8. Известное расхождение: страница `/poc/result` делает server-side fetch на `http://127.0.0.1:3001/api/poc/result` без префикса `/api/v1` — может ломаться.
+
+Сценарий 5. Работа с резюме после профиля
+1. User открывает `/resume`.
+2. Страница запрашивает историю через `GET /api/v1/resumes/history`.
+3. Доступные ветки:
+   - AI review загруженного резюме (Stanford CAR-чеклист, Redis-кэш)
+   - AI create нового резюме с нуля (2 шага: вопросы → генерация)
+   - AI generate резюме под конкретную вакансию (запускается с карточки вакансии)
+   - сохранение результата в БД
+   - upload оригинального файла
+   - standalone cover letter (без вакансии)
+4. Review flow идёт напрямую в agent: `POST {NEXT_PUBLIC_AGENT_URL}/ai/review-resume` (cached по MD5(text+context)).
+5. Create flow в agent в 2 шага:
+   - `POST {NEXT_PUBLIC_AGENT_URL}/ai/create-resume/questions` (fastChat, генерация уточняющих вопросов)
+   - `POST {NEXT_PUBLIC_AGENT_URL}/ai/create-resume/generate` (полная генерация по ответам, Stanford CAR)
+6. Generate-under-vacancy flow: `POST {NEXT_PUBLIC_AGENT_URL}/ai/generate-resume` — адаптация существующего резюме под JD.
+7. Сохранение результата в БД: `POST /api/v1/resumes` (тип `resume` или `cover_letter`).
+8. Сохранение оригинального файла: `POST /api/v1/resumes/upload` (MinIO/S3, ключ → `Resume.fileKey`).
+9. Standalone cover letter: `POST /api/v1/resumes/cover-letter` → `ResumesService` → `AiService.generateCoverLetter()` (LangChain `CoverLetterChain`, контекст из профиля + company/position).
+10. Скачивание файла: `GET /api/v1/resumes/:id/file`.
+11. Удаление: `DELETE /api/v1/resumes/:id`.
+
+Сценарий 6. Поиск и анализ вакансий
+1. User открывает `/vacancies`.
+2. `VacanciesContent` сначала читает профиль через `useProfile()`.
+3. Если в профиле есть `desiredPosition`, frontend запускает:
+   - `GET /api/v1/vacancies/recommended?position=...&skills=...&salary=...&limit=10`
+4. `VacanciesService.getRecommendedForProfile()`:
+   - SQL keyword search по локальной БД
+   - при разреженных данных дотягивает вакансии из Adzuna и сохраняет в PostgreSQL
+   - Pinecone ANN (`embeddingsService.searchSimilar`) добавляет semantic-кандидатов до TOP-50
+   - `calcMatch(...)` считает 6-компонентный скор (role / skills / seniority / salary / desc / archetype) и формирует `matchReasons[]`
+   - hybrid: `0.6 × matchScore + 0.4 × semanticScore`
+   - behavioral re-ranking по `VacancyInteraction`: ×1.2 для preferred архетипов, фильтрация dismissed
+   - в shadow-режиме параллельно опрашивается `MlRankingService` (Python ml-service :3003) и логируется разница в TOP-3 — на ранжирование пока не влияет
+   - возвращает TOP-N с `matchScore`, `matchedSkills`, `missingSkills`, `matchReasons`, `freshness`, `archetype`
+5. Если `desiredPosition` пустой, recommended-запрос вообще не стартует.
+6. Ручные ветки:
+   - `POST /api/v1/vacancies/search` — fetch + save из Adzuna
+   - `GET /api/v1/vacancies?...` — чтение из БД с фильтрами (query, salary, remote, experience, location)
+7. AI-подсценарии для конкретной вакансии (все через backend AiService, Redis-кэш):
+   - `GET /api/v1/vacancies/:id/evaluation` — глубокий анализ 6 блоков + Ghost Job Detection (`VacancyAnalysisChain`)
+   - `GET /api/v1/vacancies/:id/interview-prep?resumeId=...` — STAR+R-подготовка (`InterviewPrepChain`)
+   - `GET /api/v1/vacancies/:id/cover-letter?resumeId=...&language=ru|en` — vacancy-linked cover letter (`CoverLetterChain`, Stanford CAR)
+8. Поведенческие сигналы: каждое CTA на карточке трекается через `POST /api/v1/vacancies/:id/interaction` с `type ∈ {click, apply, favorite, analyze, dismiss}`. Запись идёт в `VacancyInteraction` (upsert per profile+vacancy+type). Кнопка «Не интересует» → dismiss + локальное скрытие карточки.
+9. Отклик и избранное в UI:
+   - `POST /api/v1/vacancies/responses` (stub: возвращает mock success)
+   - `POST /api/v1/vacancies/favorites` (stub: возвращает mock success)
+   - `GET /api/v1/vacancies/responses` (stub: пустой массив)
+
+Сценарий 7. Dashboard и аналитика после заполнения профиля
+1. После заполнения профиля user возвращается на `/dashboard`.
+2. Dashboard читает:
+   - `GET /api/v1/analytics/weekly`
+   - `GET /api/v1/analytics/dashboard`
+3. User может отдельно открыть `/analytics`.
+4. Analytics page делает:
+   - `GET /api/v1/analytics/stats?period=week|month|quarter|year`
+5. Дополнительно на `/analytics` есть Career Quiz:
+   - `CareerQuizModal` ведёт через выбор домена (IT/Finance/Marketing/Management/Creative/Other) и 10 вопросов (5 универсальных + 5 доменных)
+   - на клиенте `computeDimensionScores` + `matchCareerPaths` дают TOP-5 путей по косинусному сходству
+   - `POST /api/v1/career-assessment` → `CareerAssessmentService.analyze()` → `CareerPathChain` (`AiService.generateCareerPathAnalysis`) → топ-3 карьерных пути с роадмапом Junior→Lead, текущими/недостающими навыками, pros/cons; результат кешируется в Redis на 7 дней и сохраняется в `CareerAssessment`
+   - `GET /api/v1/career-assessment/latest` подтягивает последний результат и рендерит `CareerPathResult`
+6. Эти ветки в основном read-only и визуализируют агрегаты по активности, статусам и salary.
+
+Сценарий 8. Вторичные глобальные ветки
+1. `AIChat` смонтирован глобально в `MainLayout` и доступен с любой страницы. На бэкенде это `AiService.generateResponse()` через `CareerChatChain` на `fastChat` модели.
+2. `Header` даёт переходы, command palette, notifications и вспомогательные modal flows; имя пользователя берётся из профиля или JWT.
+3. `/settings` и `/pricing` — в основном локальные UI flows без глубокой backend-интеграции.
+4. История STAR+R-подготовок и интервью читается через `GET /api/v1/interviews` (модуль `interviews`, отдельный от vacancies-флоу — там GET для одного отклика).
+
+Главные развилки и ошибки
+- Неавторизованный user: API client отдаёт запросы без токена, защищённые контроллеры возвращают 401 — UI должен направить на `/` (AuthPage).
+- Нет профиля: `GET /profiles/me` возвращает 404, UI показывает пустую форму, баннер в `MainLayout` ведёт заполнять.
+- Нет `desiredPosition`: recommended vacancies не запрашиваются.
+- Agent (:3002) недоступен: ломаются parse / review / create / generate / PoC flows; backend AI (:3001 — vacancy analysis, cover letter, interview prep, career chat, career path) продолжает работать.
+- LLM API недоступен: backend AI цепочки падают; в Career Assessment работает fallback на mock-режим без `LLM_API_KEY`.
+- Adzuna / Pinecone недоступны: подбор вакансий деградирует до локальных DB-данных или пустого списка.
+- ml-service (:3003) недоступен: shadow-режим тихо проглатывается, ранжирование остаётся rule-based.
+- `/poc/result` может не получить данные из-за расхождения по API prefix (`/api/poc/result` без `v1`).
+- Apply / favorite по вакансиям пока stub'ы — реального persisted user-flow для откликов нет.
+- Pre-existing TS-ошибки: `fileKey`, `publishedAt` ожидают Prisma миграцию; `@qdrant/js-client-rest` и `bcryptjs` не установлены (мокаются).
+
+Побочные эффекты
+- `user.create` для нового пользователя при register
+- `profile.upsert`
+- `profileSkill.deleteMany / createMany`, возможное создание новых canonical `skill`
+- `analysisResult.create`
+- `resume.create` / `resume.delete`
+- upload resume file в MinIO / S3 (object storage)
+- `vacancy.upsert`
+- индексация вакансий в Pinecone (через `EmbeddingsService`)
+- `vacancyInteraction.upsert` (поведенческие сигналы)
+- `careerAssessment.create` (+ Redis-кэш на 7 дней)
+- AI-кэш в Redis по MD5 от входа: review-resume, parse-resume, vacancy evaluation, interview prep, cover letter
+- (планируется, инфраструктура готова) `recommendationImpression.create`, `mlModelVersion.create` после первого LightGBM-обучения
+
+Что важно отметить на общей схеме
+- Полноценный login flow есть на фронтенде: `AuthPage` → `LoginForm` / `RegisterForm` → `useLogin` / `useRegister` → `setTokens` → защищённые маршруты.
+- Профиль — центральная точка: без него /vacancies recommended, /career-assessment AI и часть resume-фич работают хуже или не стартуют. Баннер ProfileCompleteness < 70% подталкивает заполнить.
+- Upload resume parse и Save profile — два разных флоу, но `ResumeImportModal` теперь умеет сохранять напрямую через `useUpdateProfile`.
+- Agent (:3002) используется напрямую из frontend для тяжёлых AI-операций (parse / review / create / generate resume). Лёгкая AI-логика (cover letter, vacancy analysis, interview prep, career chat, career path) живёт в backend (:3001) через LangChain chains в `AiService`.
+- Все backend AI-результаты кешируются в Redis по MD5 от входных данных.
+- Vacancy ranking — гибридный: SQL + Pinecone + 6-компонентный rule-based score + behavioral boost. ML-ранжирование (LightGBM) пока в shadow-режиме до накопления 500+ взаимодействий.
+- Dashboard / analytics / Career Quiz — read-only витрины поверх уже накопленных данных и одного AI-вызова на квиз.
