@@ -118,13 +118,18 @@ jobs:
           script: |
             set -e
 
-            # Sync config files from repo (clone first time, pull on updates)
+            # Sync config files from repo
+            # First deploy: /opt/careermate exists but has no .git → init in-place
+            # (.env.production is gitignored so reset --hard won't touch it)
             REPO_URL="https://github.com/${{ github.repository }}.git"
+            mkdir -p /opt/careermate
             if [ -d /opt/careermate/.git ]; then
               git -C /opt/careermate pull origin main
             else
-              mkdir -p /opt/careermate
-              git clone "$REPO_URL" /opt/careermate
+              git -C /opt/careermate init
+              git -C /opt/careermate remote add origin "$REPO_URL"
+              git -C /opt/careermate fetch --depth=1 origin main
+              git -C /opt/careermate reset --hard FETCH_HEAD
             fi
 
             cd /opt/careermate
@@ -142,10 +147,14 @@ jobs:
             docker pull "$BACKEND_IMAGE"
             docker pull "$AGENT_IMAGE"
 
-            # Rolling restart
-            docker compose -f devops/docker/docker-compose.prod.yml \
-              up -d --no-build --remove-orphans \
-              frontend backend agent
+            COMPOSE="docker compose -f devops/docker/docker-compose.prod.yml --env-file .env.production"
+
+            # Run migrations (one-off, waits for postgres)
+            echo "Running migrations..."
+            $COMPOSE run --rm migrate
+
+            # Rolling restart of app services
+            $COMPOSE up -d --no-build --remove-orphans frontend backend agent
 
             # Wait for backend (up to 120s)
             echo "Waiting for backend..."
@@ -159,11 +168,11 @@ jobs:
               'until curl -sf http://localhost/ai/health > /dev/null; do sleep 3; done' \
               || { echo "Agent health check timed out"; exit 1; }
 
-            # Wait for frontend (up to 60s)
-            echo "Waiting for frontend..."
+            # Wait for nginx/frontend (up to 60s) — /health is handled by nginx directly
+            echo "Waiting for nginx..."
             timeout 60 bash -c \
-              'until curl -sf http://localhost/api/health > /dev/null; do sleep 3; done' \
-              || { echo "Frontend health check timed out"; exit 1; }
+              'until curl -sf http://localhost/health > /dev/null; do sleep 3; done' \
+              || { echo "Nginx health check timed out"; exit 1; }
 
             # Clean up dangling images
             docker image prune -f --filter "dangling=true"
