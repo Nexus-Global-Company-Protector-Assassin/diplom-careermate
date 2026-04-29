@@ -64,7 +64,7 @@ COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
 
 # Remove dev dependencies to reduce image size
-RUN npm prune --production
+RUN npm prune --omit=dev --legacy-peer-deps
 
 # Switch to non-root user
 USER nestjs
