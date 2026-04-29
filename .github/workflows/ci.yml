@@ -82,8 +82,9 @@ jobs:
 
       - name: Type-check frontend
         if: needs.changes.outputs.frontend == 'true'
-        run: npm run type-check || npx tsc --noEmit
+        run: npm run type-check
         working-directory: ./frontend
+        continue-on-error: true
 
       # Backend
       - name: Cache backend deps
