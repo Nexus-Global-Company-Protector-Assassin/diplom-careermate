@@ -14,12 +14,13 @@ COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
 # Copy prisma schema for generation
 COPY prisma ./prisma/
 
-# Install dependencies
+# Install dependencies (skip puppeteer chromium — not needed in production)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 RUN \
   if [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
   elif [ -f package-lock.json ]; then npm ci; \
   elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm install --frozen-lockfile; \
-  else npm install; \
+  else npm install --legacy-peer-deps; \
   fi
 
 # Generate Prisma client
