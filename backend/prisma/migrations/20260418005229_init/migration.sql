@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "User" (
+CREATE TABLE IF NOT EXISTS "User" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "passwordHash" TEXT,
@@ -16,7 +16,7 @@ CREATE TABLE "User" (
 );
 
 -- CreateTable
-CREATE TABLE "Profile" (
+CREATE TABLE IF NOT EXISTS "Profile" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "fullName" TEXT,
@@ -42,7 +42,7 @@ CREATE TABLE "Profile" (
 );
 
 -- CreateTable
-CREATE TABLE "AnalysisResult" (
+CREATE TABLE IF NOT EXISTS "AnalysisResult" (
     "id" TEXT NOT NULL,
     "profileId" TEXT NOT NULL,
     "content" JSONB NOT NULL,
@@ -52,7 +52,7 @@ CREATE TABLE "AnalysisResult" (
 );
 
 -- CreateTable
-CREATE TABLE "Resume" (
+CREATE TABLE IF NOT EXISTS "Resume" (
     "id" TEXT NOT NULL,
     "profileId" TEXT NOT NULL,
     "title" TEXT NOT NULL DEFAULT 'Мое резюме',
@@ -69,7 +69,7 @@ CREATE TABLE "Resume" (
 );
 
 -- CreateTable
-CREATE TABLE "Interview" (
+CREATE TABLE IF NOT EXISTS "Interview" (
     "id" TEXT NOT NULL,
     "profileId" TEXT NOT NULL,
     "company" TEXT NOT NULL,
@@ -87,7 +87,7 @@ CREATE TABLE "Interview" (
 );
 
 -- CreateTable
-CREATE TABLE "VacancyResponse" (
+CREATE TABLE IF NOT EXISTS "VacancyResponse" (
     "id" TEXT NOT NULL,
     "profileId" TEXT NOT NULL,
     "vacancyId" TEXT,
@@ -101,7 +101,7 @@ CREATE TABLE "VacancyResponse" (
 );
 
 -- CreateTable
-CREATE TABLE "Vacancy" (
+CREATE TABLE IF NOT EXISTS "Vacancy" (
     "id" TEXT NOT NULL,
     "hhId" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -124,25 +124,40 @@ CREATE TABLE "Vacancy" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Profile_userId_key" ON "Profile"("userId");
+CREATE UNIQUE INDEX IF NOT EXISTS "Profile_userId_key" ON "Profile"("userId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Vacancy_hhId_key" ON "Vacancy"("hhId");
+CREATE UNIQUE INDEX IF NOT EXISTS "Vacancy_hhId_key" ON "Vacancy"("hhId");
 
 -- AddForeignKey
-ALTER TABLE "Profile" ADD CONSTRAINT "Profile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "Profile" ADD CONSTRAINT "Profile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "AnalysisResult" ADD CONSTRAINT "AnalysisResult_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "AnalysisResult" ADD CONSTRAINT "AnalysisResult_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Resume" ADD CONSTRAINT "Resume_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "Resume" ADD CONSTRAINT "Resume_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Interview" ADD CONSTRAINT "Interview_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "Interview" ADD CONSTRAINT "Interview_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "VacancyResponse" ADD CONSTRAINT "VacancyResponse_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "VacancyResponse" ADD CONSTRAINT "VacancyResponse_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

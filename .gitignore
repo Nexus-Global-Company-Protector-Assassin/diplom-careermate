@@ -169,9 +169,11 @@ backups/
 .factory/
 .qoder/
 .windsurf/
-skills/
+/skills/
 SKILL.md
 skills-lock.json
+!backend/src/modules/skills/
+!backend/src/modules/skills/**
 
 # ==========================================
 # DevOps & Infrastructure
