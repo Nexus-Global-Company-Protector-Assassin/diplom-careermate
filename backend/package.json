@@ -58,7 +58,7 @@
     "ioredis": "^5.8.2",
     "joi": "^17.11.0",
     "langchain": "^0.0.214",
-    "bcryptjs": "^2.4.3",
+    "bcryptjs": "^3.0.0",
     "neo4j-driver": "^6.0.1",
     "nest-winston": "^1.9.4",
     "passport": "^0.7.0",

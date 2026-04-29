@@ -50,8 +50,6 @@
   "author": "CareerMate Team",
   "license": "MIT",
   "dependencies": {
-    "@qdrant/js-client-rest": "^1.17.0",
-    "@types/bcryptjs": "^2.4.6",
-    "bcryptjs": "^3.0.3"
+    "@qdrant/js-client-rest": "^1.17.0"
   }
 }
