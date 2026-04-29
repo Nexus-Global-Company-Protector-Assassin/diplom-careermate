@@ -177,6 +177,8 @@ jobs:
       - name: Install deps
         run: npm ci
         working-directory: ./backend
+        env:
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
 
       - name: Generate Prisma client
         run: npx prisma generate
