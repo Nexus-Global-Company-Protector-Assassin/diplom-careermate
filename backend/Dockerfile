@@ -54,8 +54,8 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nestjs
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Install dumb-init for proper signal handling + openssl for Prisma schema-engine
+RUN apk add --no-cache dumb-init openssl
 
 # Copy necessary files from builder
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
