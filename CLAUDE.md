@@ -324,15 +324,24 @@ ML_SHADOW_MODE=true                     # false = использовать ML sc
 - **Analytics** — achievement "Активный соискатель" → "Исследователь" (10 избранных), weekly report теперь считает favorites вместо responses, career progress "Отклики идут" → "Вакансии сохранены"
 
 ### Production deployment (2026-04-29) ✅
-- **nginx.conf** переписан: HTTP-only (port 80), без SSL/домена, без frontend upstream (он на Vercel). Маршруты: `/api/*` → backend:3001, `/auth/*` → backend:3001, `/ai/*` → agent:3002
-- **docker-compose.prod.yml** дополнен всеми недостающими env vars: `JWT_REFRESH_SECRET`, `RESEND_API_KEY`, Google OAuth, `QDRANT_URL/API_KEY/COLLECTION`, `NEO4J_URI/USER/PASSWORD/DATABASE`, `CORS_ORIGIN`, `FRONTEND_URL`, `REDIS_URL` для агента, `AGENT_PORT: 3002`
-- **PINECONE → Qdrant**: удалён `PINECONE_API_KEY` из backend в docker-compose.prod.yml
-- **AGENT_PORT баг**: агент использовал `AGENT_PORT`, а docker-compose передавал `PORT` → агент стартовал на 3003 вместо 3002. Исправлено: `AGENT_PORT: 3002`
-- **Agent health endpoint**: `POST /ai/health` не совпадал с деплой-скриптами (GET /health). Добавлен `agent/src/health.controller.ts` с `GET /health` и зарегистрирован в AppModule
-- **deploy.yml**: добавлены `NEXT_PUBLIC_API_URL` и `NEXT_PUBLIC_AGENT_URL` в Vercel-деплой через `env:`
-- **Создан** `.env.production.example` — полный шаблон для сервера
-- **Создан** `devops/scripts/setup-vps.sh` — скрипт первоначальной настройки Ubuntu VPS
-- **Обновлён** `devops/README.md` — пошаговая инструкция первого деплоя
+- **nginx.conf** переписан: HTTP-only (port 80), без SSL/домена. Маршруты: `/api/*` → backend:3001, `/auth/*` → backend:3001, `/ai/*` → agent:3002, `/` → frontend:3000
+- **docker-compose.prod.yml** дополнен всеми недостающими env vars: `JWT_REFRESH_SECRET`, `RESEND_API_KEY`, Google OAuth, `QDRANT_URL/API_KEY/COLLECTION`, `CORS_ORIGIN`, `FRONTEND_URL`, `REDIS_URL` для агента, `AGENT_PORT: 3002`
+- **AGENT_PORT баг**: агент использовал `AGENT_PORT`, docker-compose передавал `PORT` → агент стартовал на 3003 вместо 3002. Исправлено: `AGENT_PORT: 3002`
+- **Agent health endpoint**: `POST /ai/health` не совпадал с curl GET. Добавлен `agent/src/health.controller.ts` (GET /health) + `@Get('health')` в AgentController
+- **Prisma Alpine OpenSSL**: добавлены `binaryTargets = ["native", "linux-musl-openssl-3.0.x"]` + `openssl` пакет в backend Dockerfile
+- **Duplicate migration**: `20260419190749_add_normalized_skills` дублировал `20260415000002_add_skills_tables` → сделан idempotent (IF NOT EXISTS + DO EXCEPTION)
+- **Создан** `.env.production.example`, `devops/scripts/setup-vps.sh`, обновлён `devops/README.md`
+
+### CI/CD pipeline fixes (2026-04-30) ✅
+Серия починок, после которых `deploy.yml` проходит end-to-end:
+- **Docker image lowercase**: `github.repository` содержит заглавные буквы → `tr '[:upper:]' '[:lower:]'` в build и deploy jobs
+- **Docker Hub rate limit**: postgres/redis/nginx дополнены `pull_policy: if_not_present` в docker-compose.prod.yml
+- **nginx не стартовал**: не был включён в `$COMPOSE up -d` → добавлен явно
+- **nginx stale upstream IP** (главная причина agent health check timeout): nginx кэширует DNS при старте, при пересоздании agent контейнера продолжает слать запросы на старый IP → 502. Исправлено двумя слоями:
+  1. `resolver 127.0.0.11 valid=10s ipv6=off;` + `set $upstream "service:port"; proxy_pass http://$upstream;` в nginx.conf — заставляет переразрешать DNS по TTL
+  2. `docker exec careermate-nginx nginx -s reload` в deploy script после compose up — немедленно сбрасывает DNS кэш
+- **Smoke test "Check Frontend"**: проверял `PRODUCTION_API_URL/api/health`, но nginx роутит `/api/` на backend (NestJS), а NestJS prefix — `api/v1`. Исправлено на `PRODUCTION_API_URL/ai/health`
+- **Slack webhook**: добавлен `continue-on-error: true` на Notify steps (секрет опциональный)
 
 ### Планируется 📌
 - **Password reset** — отложено, нет email-сервиса
@@ -435,4 +444,4 @@ dimensions: archetype, salary_band, work_format, seniority
 
 ---
 
-*Последнее обновление: 2026-04-29*
+*Последнее обновление: 2026-04-30*
