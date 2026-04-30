@@ -183,6 +183,7 @@ services:
   # ------------------------------------------
   nginx:
     image: nginx:alpine
+    pull_policy: if_not_present
     container_name: careermate-nginx
     restart: always
     ports:
@@ -206,6 +207,7 @@ services:
   # ------------------------------------------
   postgres:
     image: postgres:16-alpine
+    pull_policy: if_not_present
     container_name: careermate-postgres
     restart: always
     expose:
@@ -236,6 +238,7 @@ services:
   # ------------------------------------------
   redis:
     image: redis:7-alpine
+    pull_policy: if_not_present
     container_name: careermate-redis
     restart: always
     expose:
