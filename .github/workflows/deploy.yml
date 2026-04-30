@@ -216,21 +216,22 @@ jobs:
           echo "Backend smoke test failed after retries"
           exit 1
 
-      - name: Check Frontend
+      - name: Check Agent Health
         run: |
           for i in $(seq 1 6); do
             echo "Attempt $i..."
-            if curl -sf --max-time 10 "${{ secrets.PRODUCTION_API_URL }}/api/health"; then
-              echo "Frontend is healthy ✓"
+            if curl -sf --max-time 10 "${{ secrets.PRODUCTION_API_URL }}/ai/health"; then
+              echo "Agent is healthy ✓"
               exit 0
             fi
             sleep 10
           done
-          echo "Frontend smoke test failed after retries"
+          echo "Agent smoke test failed after retries"
           exit 1
 
       - name: Notify success
         if: success()
+        continue-on-error: true
         uses: 8398a7/action-slack@v3
         with:
           status: success
@@ -242,6 +243,7 @@ jobs:
 
       - name: Notify failure
         if: failure()
+        continue-on-error: true
         uses: 8398a7/action-slack@v3
         with:
           status: failure
