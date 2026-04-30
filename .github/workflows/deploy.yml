@@ -161,8 +161,8 @@ jobs:
             echo "Running migrations..."
             $COMPOSE run --rm migrate
 
-            # Rolling restart of app services
-            $COMPOSE up -d --no-build --remove-orphans frontend backend agent
+            # Rolling restart of app services (nginx must be explicit — it depends on app services, not vice versa)
+            $COMPOSE up -d --no-build --remove-orphans frontend backend agent nginx
 
             # Wait for backend (up to 120s)
             echo "Waiting for backend..."
