@@ -170,10 +170,10 @@ jobs:
               'until curl -sf http://localhost/api/v1/health > /dev/null; do sleep 3; done' \
               || { echo "Backend health check timed out"; exit 1; }
 
-            # Wait for agent (up to 60s)
+            # Wait for agent (up to 60s) — uses POST because AgentController maps POST /ai/health
             echo "Waiting for agent..."
             timeout 60 bash -c \
-              'until curl -sf http://localhost/ai/health > /dev/null; do sleep 3; done' \
+              'until curl -sf -X POST http://localhost/ai/health > /dev/null; do sleep 3; done' \
               || { echo "Agent health check timed out"; exit 1; }
 
             # Wait for nginx/frontend (up to 60s) — /health is handled by nginx directly

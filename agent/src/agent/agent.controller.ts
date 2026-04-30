@@ -1,6 +1,7 @@
 import {
     Body,
     Controller,
+    Get,
     HttpCode,
     HttpStatus,
     Logger,
@@ -196,9 +197,7 @@ export class AgentController {
         }
     }
 
-    /**
-     * Health check агента
-     */
+    @Get('health')
     @Post('health')
     @HttpCode(HttpStatus.OK)
     health(): { status: string; timestamp: string } {
