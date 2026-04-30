@@ -42,9 +42,11 @@ async function bootstrap() {
     // Gzip compression
     app.use((compression as any).default ? (compression as any).default() : (compression as any)());
 
-    // Enable CORS
+    // Enable CORS — CORS_ORIGIN may be comma-separated for multiple allowed origins
+    const rawOrigin = configService.get('CORS_ORIGIN') || configService.get('FRONTEND_URL') || 'http://localhost:3000';
+    const corsOrigins = rawOrigin.split(',').map((o: string) => o.trim()).filter(Boolean);
     app.enableCors({
-        origin: configService.get('CORS_ORIGIN') || configService.get('FRONTEND_URL') || 'http://localhost:3000',
+        origin: corsOrigins.length === 1 ? corsOrigins[0] : corsOrigins,
         credentials: true,
     });
 
